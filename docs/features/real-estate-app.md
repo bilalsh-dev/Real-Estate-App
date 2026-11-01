@@ -17,7 +17,7 @@ Work strictly in order. Status values are `todo`, `in-progress` and `done`.
 | ID | Sub-feature | Upstream commit | Status |
 | --- | --- | --- | --- |
 | F1 | Client foundation | `23c7207` (part) | done |
-| F2 | Landing page | `23c7207` (part) | todo |
+| F2 | Landing page | `23c7207` (part) | done |
 | F3 | Server foundation and database | `23c7207` (part) | todo |
 | F4 | Authentication, profiles and settings | `23c7207` (part) | todo |
 | F5 | Domain API: properties, leases, payments, applications | `1afdc77` | todo |
@@ -91,20 +91,26 @@ Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is
 **Compare against:** `23c7207`, files `src/app/(nondashboard)/{layout.tsx,landing/*}`, `src/components/Navbar.tsx`, `src/app/page.tsx`.
 
 **Checklist**
-- [ ] `(nondashboard)` layout with the fixed `Navbar` (logo, search CTA, sign in and sign up)
-- [ ] `HeroSection` (splash image and search input), `FeaturesSection`, `DiscoverSection`, `CallToActionSection`, `FooterSection`, all with `motion` entrance animations
-- [ ] Social icons via lucide or inline SVG, replacing Font Awesome
-- [ ] Root `page.tsx` renders the landing page
+- [x] `(nondashboard)` layout with the fixed `Navbar` (logo, tagline, sign in and sign up), offset by `NAVBAR_HEIGHT_PX`
+- [x] `HeroSection` (splash image and search form), `FeaturesSection`, `DiscoverSection`, `CallToActionSection`, `FooterSection`, with `motion` entrance animations
+- [x] `(nondashboard)/page.tsx` serves the landing page at `/`, with its sections in the private `_landing/` folder
+- [x] Ran in the browser: all sections render and animate, there are no console errors, and the hero search navigates to `/search?location=...`
 
 **Acceptance tests**
-- [ ] `Navbar`: the logo links to `/`; "Sign In" links to `/signin` and "Sign Up" to `/signup`; the bar is offset by `NAVBAR_HEIGHT_PX`
-- [ ] `HeroSection`: renders the headline, a search input and a search button
-- [ ] Landing page: renders all five sections in order, and every image has non-empty alt text
-- [ ] `FooterSection`: renders the brand, the navigation links and the copyright line
-- [ ] `npm run build` succeeds, with `/` statically prerendered
+- [x] `components/Navbar.test.tsx`: the logo links to `/`; "Sign In" links to `/signin` and "Sign Up" to `/signup`; the header height equals `NAVBAR_HEIGHT_PX`
+- [x] `_landing/HeroSection.test.tsx`: renders the headline, the search box and the button; submitting navigates to `/search?location=<trimmed>`; an empty query does nothing
+- [x] `(nondashboard)/page.test.tsx`: the sections render in order and end with the footer; every image has an `alt` (5 informative, 3 decorative `alt=""`); every feature link targets `/search`; the footer renders the brand link, the footer navigation and the copyright with the current year
+- [x] `npm run build` succeeds, with `/` statically prerendered (revalidates daily for the copyright year)
 
 **Deviations**
-- Font Awesome is dropped; social icons come from lucide or inline SVG
+- Upstream serves the landing page at both `/landing` and `/`. It's now only at `/`.
+- Upstream feature cards link to the non-existent `/explore` and `/discover`. All three now link to `/search`.
+- Upstream footer links (`/about`, `/contact`, `/faq`, `/terms`, `/privacy`, `/cookies`) and social icons (`href="#"`) point nowhere. The footer links only to real routes (Search, Sign In, Sign Up), and the social icons are dropped, which also removes Font Awesome. Add them back once real pages and profiles exist.
+- The upstream hero input was hard-coded (`value="search query"`, no-op handlers). It's now a real search form; F8 adds geocoding.
+- The Navbar is the signed-out Server Component version. F4 adds the auth-aware parts (avatar menu, dashboard button, sidebar trigger), and the manager redirect from the upstream layout moves to F8.
+- Next 16: `next/image` uses `preload` instead of the deprecated `priority`, and fill images declare `sizes`
+- Cache Components forbids `new Date()` during prerender, so the copyright year comes from `components/CurrentYear.tsx` (`"use cache"` + `cacheLife("days")`)
+- The decorative discover icons use `alt=""`, and the hero and CTA images have descriptive alt text
 
 ## F3: Server foundation and database
 

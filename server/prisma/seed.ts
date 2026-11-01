@@ -1,128 +1,88 @@
-import { PrismaClient, Prisma } from "@prisma/client";
-import fs from "fs";
-import path from "path";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { z } from "zod";
+import { type Prisma, PrismaClient } from "../src/generated/prisma/client.ts";
+import { SEED_ORDER, type SeedModel } from "./seedOrder.ts";
 
-const prisma = new PrismaClient();
+const TRANSACTION_TIMEOUT_MS = 60_000;
+const SEED_DATA_DIR = path.join(import.meta.dirname, "seedData");
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+const databaseUrl = z.url().parse(process.env["DATABASE_URL"]);
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+
+type Tx = Prisma.TransactionClient;
+
+const locationSchema = z.object({
+  id: z.number().int(),
+  country: z.string(),
+  city: z.string(),
+  state: z.string(),
+  address: z.string(),
+  postalCode: z.string(),
+  coordinates: z.string().startsWith("POINT("),
+});
+
+async function readSeedFile(model: SeedModel): Promise<unknown[]> {
+  const filePath = path.join(SEED_DATA_DIR, `${model.toLowerCase()}.json`);
+  return z.array(z.unknown()).parse(JSON.parse(await readFile(filePath, "utf-8")));
 }
 
-function toPascalCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
+const insertRecord: Record<SeedModel, (tx: Tx, record: unknown) => Promise<unknown>> = {
+  Location: (tx, record) => {
+    const location = locationSchema.parse(record);
+    return tx.$executeRaw`
+      INSERT INTO "Location" ("id", "country", "city", "state", "address", "postalCode", "coordinates")
+      VALUES (${location.id}, ${location.country}, ${location.city}, ${location.state},
+              ${location.address}, ${location.postalCode},
+              ST_GeomFromText(${location.coordinates}, 4326))
+    `;
+  },
+  Manager: (tx, record) => tx.manager.create({ data: record as Prisma.ManagerCreateInput }),
+  Property: (tx, record) =>
+    tx.property.create({ data: record as Prisma.PropertyUncheckedCreateInput }),
+  Tenant: (tx, record) => tx.tenant.create({ data: record as Prisma.TenantCreateInput }),
+  Lease: (tx, record) => tx.lease.create({ data: record as Prisma.LeaseUncheckedCreateInput }),
+  Application: (tx, record) =>
+    tx.application.create({ data: record as Prisma.ApplicationUncheckedCreateInput }),
+  Payment: (tx, record) => tx.payment.create({ data: record as Prisma.PaymentCreateInput }),
+};
 
-function toCamelCase(str: string): string {
-  return str.charAt(0).toLowerCase() + str.slice(1);
-}
-
-async function insertLocationData(locations: any[]) {
-  for (const location of locations) {
-    const { id, country, city, state, address, postalCode, coordinates } =
-      location;
-    try {
-      await prisma.$executeRaw`
-        INSERT INTO "Location" ("id", "country", "city", "state", "address", "postalCode", "coordinates") 
-        VALUES (${id}, ${country}, ${city}, ${state}, ${address}, ${postalCode}, ST_GeomFromText(${coordinates}, 4326));
-      `;
-      console.log(`Inserted location for ${city}`);
-    } catch (error) {
-      console.error(`Error inserting location for ${city}:`, error);
-    }
+async function clearAll(tx: Tx) {
+  for (const model of [...SEED_ORDER].reverse()) {
+    await tx.$executeRawUnsafe(`DELETE FROM "${model}"`);
   }
 }
 
-async function resetSequence(modelName: string) {
-  const quotedModelName = `"${toPascalCase(modelName)}"`;
-
-  const maxIdResult = await (
-    prisma[modelName as keyof PrismaClient] as any
-  ).findMany({
-    select: { id: true },
-    orderBy: { id: "desc" },
-    take: 1,
-  });
-
-  if (maxIdResult.length === 0) return;
-
-  const nextId = maxIdResult[0].id + 1;
-  await prisma.$executeRaw(
-    Prisma.raw(`
-    SELECT setval(pg_get_serial_sequence('${quotedModelName}', 'id'), coalesce(max(id)+1, ${nextId}), false) FROM ${quotedModelName};
-  `)
+async function resetSequence(tx: Tx, model: SeedModel) {
+  await tx.$executeRawUnsafe(
+    `SELECT setval(pg_get_serial_sequence('"${model}"', 'id'), COALESCE(MAX("id"), 1), MAX("id") IS NOT NULL) FROM "${model}"`,
   );
-  console.log(`Reset sequence for ${modelName} to ${nextId}`);
 }
 
-async function deleteAllData(orderedFileNames: string[]) {
-  const modelNames = orderedFileNames.map((fileName) => {
-    return toPascalCase(path.basename(fileName, path.extname(fileName)));
-  });
+async function seed() {
+  const data = new Map<SeedModel, unknown[]>();
+  for (const model of SEED_ORDER) data.set(model, await readSeedFile(model));
 
-  for (const modelName of modelNames.reverse()) {
-    const modelNameCamel = toCamelCase(modelName);
-    const model = (prisma as any)[modelNameCamel];
-    if (!model) {
-      console.error(`Model ${modelName} not found in Prisma client`);
-      continue;
-    }
-    try {
-      await model.deleteMany({});
-      console.log(`Cleared data from ${modelName}`);
-    } catch (error) {
-      console.error(`Error clearing data from ${modelName}:`, error);
-    }
-  }
-}
-
-async function main() {
-  const dataDirectory = path.join(__dirname, "seedData");
-
-  const orderedFileNames = [
-    "location.json", // No dependencies
-    "manager.json", // No dependencies
-    "property.json", // Depends on location and manager
-    "tenant.json", // No dependencies
-    "lease.json", // Depends on property and tenant
-    "application.json", // Depends on property and tenant
-    "payment.json", // Depends on lease
-  ];
-
-  // Delete all existing data
-  await deleteAllData(orderedFileNames);
-
-  // Seed data
-  for (const fileName of orderedFileNames) {
-    const filePath = path.join(dataDirectory, fileName);
-    const jsonData = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-    const modelName = toPascalCase(
-      path.basename(fileName, path.extname(fileName))
-    );
-    const modelNameCamel = toCamelCase(modelName);
-
-    if (modelName === "Location") {
-      await insertLocationData(jsonData);
-    } else {
-      const model = (prisma as any)[modelNameCamel];
-      try {
-        for (const item of jsonData) {
-          await model.create({
-            data: item,
-          });
-        }
-        console.log(`Seeded ${modelName} with data from ${fileName}`);
-      } catch (error) {
-        console.error(`Error seeding data for ${modelName}:`, error);
+  await prisma.$transaction(
+    async (tx) => {
+      await clearAll(tx);
+      for (const model of SEED_ORDER) {
+        const records = data.get(model) ?? [];
+        for (const record of records) await insertRecord[model](tx, record);
+        await resetSequence(tx, model);
+        console.warn(`Seeded ${records.length} ${model} records`);
       }
-    }
-
-    // Reset the sequence after seeding each model
-    await resetSequence(modelName);
-
-    await sleep(1000);
-  }
+    },
+    { timeout: TRANSACTION_TIMEOUT_MS },
+  );
 }
 
-main()
-  .catch((e) => console.error(e))
-  .finally(async () => await prisma.$disconnect());
+try {
+  await seed();
+} catch (error) {
+  console.error("Seeding failed, no changes were committed:", error);
+  process.exitCode = 1;
+} finally {
+  await prisma.$disconnect();
+}

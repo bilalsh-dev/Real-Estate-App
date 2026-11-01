@@ -11,6 +11,8 @@ For each of `client/` and `server/` that contains a `package.json`, run these sc
 2. `npm run typecheck`
 3. `npm run test`
 
+Then, in `server/`, run `npm run prisma:check` (start the database first with `npm run db:up` if it isn't running). It fails when migrations are pending or the schema has drifted from them.
+
 Rules:
 - Run every step, even after a failure, so the report is complete.
 - Report each package and step as pass or fail. For failures, include the relevant error output.

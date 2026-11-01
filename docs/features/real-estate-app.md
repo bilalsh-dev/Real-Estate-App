@@ -18,7 +18,7 @@ Work strictly in order. Status values are `todo`, `in-progress` and `done`.
 | --- | --- | --- | --- |
 | F1 | Client foundation | `23c7207` (part) | done |
 | F2 | Landing page | `23c7207` (part) | done |
-| F3 | Server foundation and database | `23c7207` (part) | todo |
+| F3 | Server foundation and database | `23c7207` (part) | done |
 | F4 | Authentication, profiles and settings | `23c7207` (part) | todo |
 | F5 | Domain API: properties, leases, payments, applications | `1afdc77` | todo |
 | F6 | Search and property details UI | `cac6ce4` | todo |
@@ -40,8 +40,11 @@ Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is
 | client | `NEXT_PUBLIC_AWS_COGNITO_USER_POOL_ID` | Cognito user pool | F4 |
 | client | `NEXT_PUBLIC_AWS_COGNITO_USER_POOL_CLIENT_ID` | Cognito app client | F4 |
 | client | `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Mapbox GL | F6 |
+| server | `NODE_ENV` | `development`, `test` or `production` | F3 |
 | server | `PORT` | HTTP port | F3 |
+| server | `CORS_ORIGINS` | Comma-separated allowed browser origins (not in upstream) | F3 |
 | server | `DATABASE_URL` | PostgreSQL connection | F3 |
+| server | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Local Docker database only | F3 |
 | server | `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | JWT verification (not in upstream) | F4 |
 | server | `AWS_REGION` | S3 and Cognito region | F4 |
 | server | `S3_BUCKET_NAME` | Property photo bucket | F5 |
@@ -119,22 +122,31 @@ Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is
 **Compare against:** `23c7207`, files `server/{package.json,tsconfig.json}`, `src/index.ts`, `prisma/{schema.prisma,migrations/*,seed.ts,seedData/*}`.
 
 **Checklist**
-- [ ] ESM TypeScript project with `tsx` for dev, `tsc` for build, and the ESLint, Prettier and Vitest setup
-- [ ] `config/env.ts` (Zod-validated) and `.env.example`
-- [ ] Split `app.ts` and `index.ts`, with helmet, cors, morgan, the JSON body parser and a central error handler
-- [ ] Prisma 7 schema with the `postgresqlExtensions` PostGIS extension, `prisma.config.ts`, the pg driver adapter and a `lib/prisma.ts` singleton
-- [ ] Initial migration; seed script that loads `seedData/*.json` in dependency order and resets sequences
-- [ ] Health route `GET /`
+- [x] ESM TypeScript project (TS 6, `.ts` imports rewritten by `tsc`), with `tsx` for dev, `tsc` for build, type-aware ESLint, Prettier and Vitest + supertest
+- [x] `config/env.ts` (Zod-validated, `parseEnv`) and `.env.example`
+- [x] Split `app.ts` (`createApp(config, registerRoutes)`) and `index.ts` (listen + graceful shutdown), with helmet, CORS allow-list, morgan, the JSON body parser and a central 404 and error handler
+- [x] Prisma 7 schema (`prisma-client` generator, `postgresqlExtensions` + PostGIS), `prisma.config.ts`, the `@prisma/adapter-pg` adapter and a `lib/prisma.ts` singleton
+- [x] Local PostgreSQL 18 + PostGIS 3.6 via `docker-compose.yml`
+- [x] Initial migration; transactional seed script that loads `seedData/*.json` in FK order and resets sequences
+- [x] Health route `GET /`
+- [x] Ran it: migrated, seeded twice (idempotent), started the compiled build, exercised the endpoints, and shut down cleanly on SIGTERM
 
 **Acceptance tests**
-- [ ] `app.test.ts` (supertest): `GET /` returns 200; an unknown route returns 404 `{ message }`; a thrown error returns 500 `{ message }` with no stack trace; helmet security headers are present
-- [ ] `config/env.test.ts`: parsing fails with a clear message when `DATABASE_URL` or `PORT` is missing or invalid
-- [ ] `prisma validate` passes, and `prisma migrate diff` shows no drift between the schema and the migrations
-- [ ] Seed ordering: the seed model order respects foreign keys (Location → Manager → Property → Tenant → Lease → Application → Payment)
+- [x] `src/app.test.ts` (supertest): `GET /` returns 200 `{ status: "ok" }`; an unknown route returns 404 `{ message }`; an `HttpError` maps to its status; a thrown error and a rejected async handler return a generic 500 with no internal details; malformed JSON returns 400; helmet headers are present and `x-powered-by` is hidden; CORS allows only configured origins
+- [x] `src/config/env.test.ts`: a valid env parses (CORS list split, `PORT` coerced); a missing `DATABASE_URL`, `PORT`, `NODE_ENV` or `CORS_ORIGINS` fails naming the key; an invalid port, a non-Postgres URL, a bad origin or an unknown `NODE_ENV` are rejected
+- [x] `prisma validate` passes, and `npm run prisma:check` reports no pending migrations and no drift
+- [x] `prisma/seedOrder.test.ts`: `SEED_ORDER` covers every schema model exactly once, and every model comes after the models its foreign keys reference (parsed from `schema.prisma`)
+- [x] Seed against the real DB: 10 locations, 10 managers, 10 properties, 15 tenants, 15 leases, 15 applications, 15 payments, 23 favorites, 14 residences; coordinates stored as PostGIS points; sequences continue after the max id
 
 **Deviations**
-- `body-parser` is dropped; Express 5's built-in `express.json()` and `express.urlencoded()` cover it
+- `body-parser` and `dotenv` are dropped. Express 5's built-in parsers and Node 26's `--env-file-if-exists` / `process.loadEnvFile` cover them.
 - Client types come from our own domain types instead of copying the Prisma `index.d.ts` into the client
+- CORS is restricted to `CORS_ORIGINS` (upstream allows every origin)
+- The health route returns JSON `{ status: "ok" }` instead of plain text
+- The generated migration SQL is byte-for-byte identical to upstream's `20250203030418_init`
+- Seed: upstream logs and swallows insert errors, sleeps a second per model, and interpolates table names into `setval`. Ours validates locations with Zod, runs in a single transaction (all or nothing), exits non-zero on failure, and only uses table names from the fixed `SEED_ORDER` list.
+- Docker image `imresamu/postgis:18-3.6` instead of `postgis/postgis`, which has no arm64 build. Its init scripts are disabled so local matches a fresh RDS database.
+- `prisma.config.ts` reads `process.env["DATABASE_URL"]` instead of `env()`, so `prisma generate` (`postinstall`) works in CI without a database. Commands that need a database still fail clearly when it is missing.
 
 ## F4: Authentication, profiles and settings
 

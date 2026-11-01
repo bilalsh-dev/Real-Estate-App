@@ -45,7 +45,7 @@ Always use the latest stable (non-RC, non-beta) release, and the Active LTS for 
 | Auth | AWS Cognito via aws-amplify + @aws-amplify/ui-react; server verifies with aws-jwt-verify | 6.x |
 | Backend | Express | 5.x |
 | ORM | Prisma with the PostgreSQL driver adapter | 7.x stable (not 8 RC) |
-| Database | PostgreSQL + PostGIS | latest stable |
+| Database | PostgreSQL + PostGIS (local: Docker `imresamu/postgis`) | 18, 3.6 |
 | Storage | AWS S3 via @aws-sdk/client-s3 + @aws-sdk/lib-storage | 3.x |
 | Lint and format | ESLint flat config, typescript-eslint, Prettier | 9.x (eslint-config-next plugins do not support 10 yet), 8.x, 3.x |
 | Tests | Vitest (+ Testing Library on the client) | latest |
@@ -65,7 +65,7 @@ Run these inside `client/` or `server/`:
 | `npm run test` | Vitest, single run |
 | `npm run format` | Prettier write |
 
-Server only: `npm run prisma:generate`, `npm run prisma:migrate`, `npm run seed`.
+Server only: `npm run db:up`, `npm run prisma:migrate`, `npm run prisma:check`, `npm run seed` (see `server/CLAUDE.md`). The local database runs in Docker, so Docker Desktop must be running.
 
 ## Conventions (both packages)
 
@@ -103,4 +103,5 @@ Server only: `npm run prisma:generate`, `npm run prisma:migrate`, `npm run seed`
 
 ## Available Claude tooling
 - Project skills: `implement-subfeature`, `verify` (in `.claude/skills/`).
+- Prisma's official skills (from `prisma/skills`, MIT): `prisma-cli`, `prisma-client-api`, `prisma-upgrade-v7`. `prisma-orm-setup` is intentionally not installed, because it defaults new apps to Prisma 8.
 - Plugin skills to load when relevant: `vercel:nextjs`, `vercel:shadcn`, `vercel:react-best-practices`, `vercel:turbopack`.

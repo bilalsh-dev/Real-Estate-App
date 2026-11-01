@@ -1,0 +1,275 @@
+# Feature: Real Estate Rental Platform
+
+Rentiful is a rental marketplace. Tenants search properties on a map, favorite them, apply and track leases and payments. Managers list properties with photos, review applications and manage leases.
+
+The feature list comes from the commit history of the tutorial repo `ed-roh/real-estate-prod`. It's cloned at `.upstream/real-estate-prod` as a read-only reference and is never copied into this project.
+
+## How we work
+
+1. **Understand:** read the upstream commit for the sub-feature (`git -C .upstream/real-estate-prod show <sha>`) to learn what it does.
+2. **Implement:** write our own implementation on the current stack and the conventions in `CLAUDE.md`. Don't copy and paste.
+3. **Compare:** diff our behaviour against the upstream commit. Behaviour must match unless a deviation is recorded.
+4. **Keep what is newer:** newer package versions, current APIs (Next 16, Tailwind 4, Zod 4, Prisma 7, Express 5) and bug or security fixes win over upstream. Each one is listed under the sub-feature's **Deviations**.
+5. **Verify:** a sub-feature is `done` only when every **Acceptance test** listed for it exists and passes, and `verify` (lint, typecheck, test) passes in both packages.
+
+Work strictly in order. Status values are `todo`, `in-progress` and `done`.
+
+| ID | Sub-feature | Upstream commit | Status |
+| --- | --- | --- | --- |
+| F1 | Client foundation | `23c7207` (part) | done |
+| F2 | Landing page | `23c7207` (part) | todo |
+| F3 | Server foundation and database | `23c7207` (part) | todo |
+| F4 | Authentication, profiles and settings | `23c7207` (part) | todo |
+| F5 | Domain API: properties, leases, payments, applications | `1afdc77` | todo |
+| F6 | Search and property details UI | `cac6ce4` | todo |
+| F7 | Dashboard property pages | `0d81098` | todo |
+| F8 | Applications flow and cleanup | `b3de07e` | todo |
+| F9 | Deployment | `c2fc44a`, `89bcea4`, `3b4ed81`, `32828d8` | todo |
+
+Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is split into F1–F4.
+
+## Domain model
+
+`Manager` and `Tenant` are keyed by `cognitoId`. A `Property` belongs to a `Manager` and has one `Location` (PostGIS `geography(Point, 4326)`). Tenants favorite properties and live in properties. An `Application` (Pending, Denied, Approved) links a tenant to a property and, once approved, to a `Lease`. A `Lease` has many `Payment`s (Pending, Paid, PartiallyPaid, Overdue). Enums: `Amenity`, `Highlight`, `PropertyType`.
+
+## Environment variables
+
+| Package | Key | Purpose | Introduced |
+| --- | --- | --- | --- |
+| client | `NEXT_PUBLIC_API_BASE_URL` | Express API base URL | F1 |
+| client | `NEXT_PUBLIC_AWS_COGNITO_USER_POOL_ID` | Cognito user pool | F4 |
+| client | `NEXT_PUBLIC_AWS_COGNITO_USER_POOL_CLIENT_ID` | Cognito app client | F4 |
+| client | `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` | Mapbox GL | F6 |
+| server | `PORT` | HTTP port | F3 |
+| server | `DATABASE_URL` | PostgreSQL connection | F3 |
+| server | `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | JWT verification (not in upstream) | F4 |
+| server | `AWS_REGION` | S3 and Cognito region | F4 |
+| server | `S3_BUCKET_NAME` | Property photo bucket | F5 |
+
+---
+
+## F1: Client foundation
+
+**Goal:** an empty but production-ready Next.js app with the design system, tooling and shared libs in place.
+
+**Compare against:** `23c7207`, files `client/{package.json,next.config.ts,eslint.config.mjs,components.json,tsconfig.json,tailwind.config.ts}`, `src/app/{layout.tsx,globals.css,providers.tsx,page.tsx}`, `src/components/ui/*`, `src/lib/*`, `src/hooks/use-mobile.tsx`, `src/state/*`, `src/types/*`.
+
+**Checklist**
+- [x] Scaffold with `create-next-app@latest` (Next 16.4, React 19.3, TypeScript, App Router, `src/`, Tailwind 4, ESLint, Turbopack)
+- [x] Move the existing starter files into `src/` and `public/`
+- [x] shadcn init (`radix-nova` style, Radix primitives) plus primitives: avatar, badge, button, card, checkbox, command, dialog, dropdown-menu, field, input, label, navigation-menu, radio-group, select, separator, sheet, sidebar, skeleton, slider, sonner, switch, table, tabs, textarea, tooltip
+- [x] Port the upstream theme to Tailwind v4 in `globals.css` (brand `primary-*` and `secondary-*` scales under `@theme`), and drop `tailwind.config.ts`
+- [x] Prettier, ESLint flat config with zero warnings, `typecheck` script, Vitest + Testing Library
+- [x] `lib/env.ts` (Zod-validated public env) and `.env.example`
+- [x] Redux store (`state/store.ts`), `StoreProvider`, and a typed RTK Query base API (`state/api.ts`)
+- [x] Port `lib/constants.ts`, `lib/schemas.ts` (Zod 4), `lib/utils.ts`, `types/index.ts`
+
+**Acceptance tests**
+- [x] `lib/utils.test.ts`: `formatEnumString` splits PascalCase; `formatPriceValue` covers "any", below 1k and k values for min and max; `cleanParams` drops empty, `"any"`, null and all-null arrays but keeps `0` and `false`; `withToast` shows success, shows error and rethrows, stays silent with no messages
+- [x] `lib/schemas.test.ts`: a valid property coerces numbers; quarter baths are rejected; empty photos, amenities and highlights are rejected; unknown enum values are rejected; blank strings are rejected; application email and phone are validated; settings name is required
+- [x] `hooks/use-mobile.test.ts`: reflects the initial media query, updates on breakpoint change, unsubscribes on unmount
+- [x] `npm run build` succeeds
+
+**Deviations**
+- Tailwind 4 CSS-first config instead of `tailwind.config.ts`
+- `motion` instead of `framer-motion`
+- ESLint CLI instead of the `next lint` command, which Next 16 removed
+- shadcn `form` is deprecated in the current registry, so forms use the `field` primitives with RHF `Controller`. `FormField.tsx` is rebuilt in F4, where it is first used.
+- `cn` comes from the official `cn` package (installed by shadcn) instead of `clsx` + `tailwind-merge`
+- Enums are `as const` objects with union types instead of TS `enum`s and ambient `declare global` types. Domain types are explicit exports in `types/index.ts`, and component prop types live with their components.
+- `propertySchema`: `amenities` and `highlights` are arrays of enum values (upstream used a single string, which didn't match the DB arrays), `baths` allows half steps (the DB stores a float), the photo field is renamed to `photos`, and fees can be 0
+- The dev-only `testUsers` mock constant is removed
+- `createNewUserInDatabase` moves to F4 with the auth code
+- The global UI slice is deferred to F6, where it gets its first state (filters)
+- shadcn's generated `use-mobile.ts` is rewritten with `useSyncExternalStore`, because the original called `setState` in an effect, which the React Compiler lint rule rejects
+- Production dependencies audit clean. 17 moderate dev-only advisories (`minimatch` via ESLint plugins) have no non-breaking fix.
+
+## F2: Landing page
+
+**Goal:** the public marketing page at `/`.
+
+**Compare against:** `23c7207`, files `src/app/(nondashboard)/{layout.tsx,landing/*}`, `src/components/Navbar.tsx`, `src/app/page.tsx`.
+
+**Checklist**
+- [ ] `(nondashboard)` layout with the fixed `Navbar` (logo, search CTA, sign in and sign up)
+- [ ] `HeroSection` (splash image and search input), `FeaturesSection`, `DiscoverSection`, `CallToActionSection`, `FooterSection`, all with `motion` entrance animations
+- [ ] Social icons via lucide or inline SVG, replacing Font Awesome
+- [ ] Root `page.tsx` renders the landing page
+
+**Acceptance tests**
+- [ ] `Navbar`: the logo links to `/`; "Sign In" links to `/signin` and "Sign Up" to `/signup`; the bar is offset by `NAVBAR_HEIGHT_PX`
+- [ ] `HeroSection`: renders the headline, a search input and a search button
+- [ ] Landing page: renders all five sections in order, and every image has non-empty alt text
+- [ ] `FooterSection`: renders the brand, the navigation links and the copyright line
+- [ ] `npm run build` succeeds, with `/` statically prerendered
+
+**Deviations**
+- Font Awesome is dropped; social icons come from lucide or inline SVG
+
+## F3: Server foundation and database
+
+**Goal:** the Express 5 API skeleton plus the full Prisma schema, migrations and seed data.
+
+**Compare against:** `23c7207`, files `server/{package.json,tsconfig.json}`, `src/index.ts`, `prisma/{schema.prisma,migrations/*,seed.ts,seedData/*}`.
+
+**Checklist**
+- [ ] ESM TypeScript project with `tsx` for dev, `tsc` for build, and the ESLint, Prettier and Vitest setup
+- [ ] `config/env.ts` (Zod-validated) and `.env.example`
+- [ ] Split `app.ts` and `index.ts`, with helmet, cors, morgan, the JSON body parser and a central error handler
+- [ ] Prisma 7 schema with the `postgresqlExtensions` PostGIS extension, `prisma.config.ts`, the pg driver adapter and a `lib/prisma.ts` singleton
+- [ ] Initial migration; seed script that loads `seedData/*.json` in dependency order and resets sequences
+- [ ] Health route `GET /`
+
+**Acceptance tests**
+- [ ] `app.test.ts` (supertest): `GET /` returns 200; an unknown route returns 404 `{ message }`; a thrown error returns 500 `{ message }` with no stack trace; helmet security headers are present
+- [ ] `config/env.test.ts`: parsing fails with a clear message when `DATABASE_URL` or `PORT` is missing or invalid
+- [ ] `prisma validate` passes, and `prisma migrate diff` shows no drift between the schema and the migrations
+- [ ] Seed ordering: the seed model order respects foreign keys (Location → Manager → Property → Tenant → Lease → Application → Payment)
+
+**Deviations**
+- `body-parser` is dropped; Express 5's built-in `express.json()` and `express.urlencoded()` cover it
+- Client types come from our own domain types instead of copying the Prisma `index.d.ts` into the client
+
+## F4: Authentication, profiles and settings
+
+**Goal:** Cognito sign-up and sign-in with a tenant or manager role, the user is auto-provisioned in the DB, plus settings pages and the dashboard shell.
+
+**Compare against:** `23c7207`, files `client/src/app/(auth)/authProvider.tsx`, `src/app/(dashboard)/{layout.tsx,tenants/settings,managers/settings,tenants/favorites}`, `src/components/{AppSidebar,SettingsForm,FormField}.tsx`, `src/state/api.ts` (`getAuthUser`, `updateTenantSettings`, `updateManagerSettings`), `server/src/{middleware/authMiddleware.ts,routes/{tenant,manager}Routes.ts,controllers/{tenant,manager}Controllers.ts}`.
+
+**Checklist**
+- [ ] Amplify configuration from `lib/env.ts`; Authenticator with a custom `custom:role` radio on sign-up
+- [ ] Auth routing: `/signin` and `/signup` are only available signed out, and dashboard routes require sign-in
+- [ ] `getAuthUser`: fetch the Cognito session, then `GET /{role}s/:cognitoId`, creating the user on 404
+- [ ] Server: `authMiddleware(roles)` verifying the token with `aws-jwt-verify`
+- [ ] `GET/POST/PUT /tenants`, `GET/POST/PUT /managers`, each with Zod validation and a service layer
+- [ ] Dashboard layout with `AppSidebar` (role-based links), `SettingsForm` for both roles, and a favorites page placeholder
+- [ ] Amplify UI overrides and `.dashboard-container` styles in `globals.css`
+
+**Acceptance tests**
+- [ ] `authMiddleware`: a missing token gets 401; an invalid signature or expired token gets 401; a valid token with a disallowed role gets 403; a valid token with an allowed role sets `req.user` and calls `next`
+- [ ] Tenant and manager services: get returns the user or a not-found error; create persists; update changes only name, email and phone
+- [ ] Routes (supertest, verifier mocked): `GET /tenants/:cognitoId` for another user's id returns 403; an invalid body returns 400 with field errors
+- [ ] `getAuthUser`: creates the DB user when the profile fetch returns 404, and returns `{ cognitoInfo, userInfo, userRole }`
+- [ ] `AppSidebar`: the tenant role shows Favorites, Applications, Residences and Settings; the manager role shows Properties, Applications and Settings; the active link is highlighted
+- [ ] `SettingsForm`: starts read-only, enables editing on toggle, blocks submission on invalid input, and submits valid data
+
+**Deviations**
+- **Security:** upstream uses `jwt.decode` with no signature check, which lets anyone forge a role. Replaced with verified tokens.
+- Server env adds `COGNITO_USER_POOL_ID` and `COGNITO_CLIENT_ID`
+
+## F5: Domain API
+
+**Goal:** the complete REST API.
+
+**Compare against:** `1afdc77`.
+
+**Endpoints**
+- `GET /properties`: filters `favoriteIds`, `priceMin`, `priceMax`, `beds`, `baths`, `propertyType`, `squareFeetMin`, `squareFeetMax`, `amenities`, `availableFrom`, `latitude`, `longitude` (PostGIS `ST_DWithin`, 1000 km radius)
+- `GET /properties/:id` (with location coordinates as GeoJSON)
+- `POST /properties` (manager): multipart `photos` uploaded to S3, then the address is geocoded with Nominatim and the location is created with `ST_MakePoint`
+- `GET /leases` and `GET /leases/:id/payments` (manager, tenant)
+- `GET /applications` (`userId`, `userType`), `POST /applications` (tenant), `PUT /applications/:id/status` (manager)
+- `GET /tenants/:cognitoId/current-residences`, `POST` and `DELETE /tenants/:cognitoId/favorites/:propertyId`
+- `GET /managers/:cognitoId/properties`
+
+**Checklist**
+- [ ] Services, controllers and routes for properties, leases, applications, and the tenant and manager additions
+- [ ] `lib/s3.ts` upload helper, and Nominatim geocoding with a proper `User-Agent` header
+- [ ] Zod schemas for every query, params and body
+- [ ] Authorization: users can only read or modify their own resources
+
+**Acceptance tests**
+- [ ] Property filter builder: each filter produces the expected SQL condition; omitted filters add nothing; all values are parameterized (no string interpolation)
+- [ ] `createProperty`: uploads every photo to S3, geocodes the address, and stores the returned coordinates and photo URLs; a geocoding miss returns 400 and nothing is persisted
+- [ ] `GET /properties/:id`: returns coordinates as `{ longitude, latitude }`; an unknown id returns 404
+- [ ] Favorites: adding twice is idempotent; removing a favorite that doesn't exist is a no-op; another tenant's favorites return 403
+- [ ] Applications: create stores a Pending application with **no** lease; approve creates exactly one lease, links it, and adds the tenant to the property; deny creates no lease; only the property's manager can change the status (otherwise 403)
+- [ ] Leases and payments: a tenant sees only their leases; a manager sees only leases on their properties
+
+**Deviations**
+- Upstream `createApplication` creates a lease when the tenant applies, and approval creates a second one. The lease is now created only on approval.
+- Ownership checks added; upstream lets any tenant read or modify any other tenant's data
+
+## F6: Search and property details UI
+
+**Goal:** the public search experience.
+
+**Compare against:** `cac6ce4`.
+
+**Checklist**
+- [ ] `global` Redux slice (filters, full-filters toggle, view mode) synced to URL search params
+- [ ] `/search`: `FiltersBar` (location search, price, beds and baths, property type, grid or list toggle), `FiltersFull` side panel, `Map` (Mapbox GL markers with popups), `Listings` (`Card` or `CardCompact`, favorite toggle)
+- [ ] `/search/[id]`: `ImagePreviews` carousel, `PropertyOverview`, `PropertyDetails` (amenities, highlights, tabs), `PropertyLocation` (map), `ContactWidget`
+- [ ] RTK Query `getProperties`, `getProperty`, `getTenant`, `addFavoriteProperty`, `removeFavoriteProperty`, with cache tags
+- [ ] Mapbox popup styles in `globals.css`; `next.config.ts` remote image patterns
+
+**Acceptance tests**
+- [ ] Filters slice: each reducer updates only its own field; `setFilters` merges partial updates
+- [ ] URL sync: filters serialize to search params and parse back to the same state; invalid params are ignored
+- [ ] `Card` and `CardCompact`: render the price, beds, baths and square feet; the favorite button calls `onFavoriteToggle`; the button is hidden when `showFavoriteButton` is false
+- [ ] `Listings`: shows the result count and location, and renders the grid or list layout according to view mode
+- [ ] `ImagePreviews`: next and previous wrap around
+- [ ] RTK Query: toggling a favorite invalidates the tenant and property tags
+
+## F7: Dashboard property pages
+
+**Goal:** the manager and tenant property dashboards.
+
+**Compare against:** `0d81098`.
+
+**Checklist**
+- [ ] `Header` and `Loading` components
+- [ ] Tenant: `/tenants/favorites`, `/tenants/residences`, `/tenants/residences/[id]` (lease, payment history, billing)
+- [ ] Manager: `/managers/properties`, `/managers/properties/[id]` (leases table, payment status), `/managers/newproperty` (React Hook Form + FilePond photo upload)
+- [ ] RTK Query `getCurrentResidences`, `getManagerProperties`, `createProperty`, `getLeases`, `getPropertyLeases`, `getPayments`
+
+**Acceptance tests**
+- [ ] `Header` renders the title and subtitle
+- [ ] New property form: blocks submission without photos or required fields; builds `FormData` with each photo under `photos`, arrays as JSON, and `managerCognitoId`
+- [ ] Manager property detail: the leases table shows tenant, dates, rent and the current month's payment status
+- [ ] Tenant residence detail: shows the lease period, the next payment date, and the payment history sorted by date
+- [ ] Empty states: the favorites, residences and properties lists each show a message when empty
+
+## F8: Applications flow and cleanup
+
+**Goal:** tenants apply, and managers approve or deny.
+
+**Compare against:** `b3de07e`.
+
+**Checklist**
+- [ ] `ApplicationModal` on the property page (tenant only)
+- [ ] `ApplicationCard`; `/tenants/applications` and `/managers/applications` with status tabs, approve and deny actions, and a lease link
+- [ ] Hero search navigates to `/search` with the geocoded location
+- [ ] Root redirect: signed-in managers go to `/managers/properties`
+- [ ] RTK Query `getApplications`, `createApplication`, `updateApplicationStatus`
+
+**Acceptance tests**
+- [ ] `ApplicationModal`: validates with `applicationSchema`, submits `propertyId`, `tenantCognitoId` and `applicationDate`, then closes on success
+- [ ] `ContactWidget`: a signed-out user sees "Sign In to Apply", a tenant sees "Submit Application", and a manager sees no apply button
+- [ ] Manager applications page: the tabs filter by status; Approve and Deny call `updateApplicationStatus` with the right status; the buttons show only for Pending
+- [ ] `ApplicationCard`: renders the status badge colour per status and the lease end date when approved
+- [ ] Hero search: submitting a location dispatches the filters and navigates to `/search` with params
+- [ ] Root page: a manager is redirected to `/managers/properties`; a tenant or a signed-out user sees the landing page
+
+**Deviations**
+- Upstream `ContactWidget` shows "Submit Application" to any signed-in user, including managers, who can't apply. Managers see no apply button.
+
+## F9: Deployment
+
+**Goal:** production deployment on AWS (EC2, RDS, Amplify, API Gateway, S3).
+
+**Compare against:** `c2fc44a`, `89bcea4`, `3b4ed81`, `32828d8`.
+
+**Checklist**
+- [ ] `server/ecosystem.config.cjs` (PM2) runs the built `dist/index.js` with `NODE_ENV=production`
+- [ ] Client ESLint and image config adjustments (`*.amazonaws.com` remote pattern)
+- [ ] Property photo URLs built from the S3 bucket and region
+- [ ] `docs/deployment/aws.md`: VPC and networking, EC2 setup (Node 26 via nvm, PM2), RDS PostgreSQL with PostGIS, Amplify hosting, API Gateway proxy, S3 bucket policy, budget alarm
+
+**Acceptance tests**
+- [ ] `npm run build` succeeds in both packages, and `node dist/index.js` starts and answers `GET /`
+- [ ] The PM2 config points at `dist/index.js` and sets `NODE_ENV=production`
+- [ ] `next.config.ts` allows `*.amazonaws.com` images, and the S3 URL builder produces `https://<bucket>.s3.<region>.amazonaws.com/<key>`
+
+**Deviations**
+- Upstream PM2 runs `npm run dev` in production. This version runs the compiled build.

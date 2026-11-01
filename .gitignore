@@ -13,3 +13,6 @@ coverage/
 *.tsbuildinfo
 next-env.d.ts
 .vercel
+
+.upstream/
+.playwright-mcp/

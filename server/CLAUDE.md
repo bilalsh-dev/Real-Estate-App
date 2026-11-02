@@ -14,7 +14,7 @@ src/services/         Business logic and data access, created with an injected P
 src/schemas/          Zod schemas for params, query and body
 src/middleware/       errorHandler, auth (createAuthMiddleware, requireUser, assertSelf), validate (withValidation)
 src/lib/              prisma.ts (singleton client), errors.ts (HttpError subclasses), tokenVerifier.ts, prismaErrors.ts
-src/test-utils/       Test helpers (local JWT signing), excluded from the build
+src/test-utils/       Test helpers (local JWT signing, DB fixtures, integration setup), excluded from the build
 src/generated/prisma/ Generated Prisma client (gitignored, created by `postinstall`)
 prisma/               schema.prisma, migrations, seed.ts, seedOrder.ts, seedData/*.json
 prisma.config.ts      Prisma 7 config: schema, migrations, seed command, datasource URL
@@ -41,6 +41,7 @@ The image is `imresamu/postgis` (multi-arch builds from the official PostGIS ima
 | `npm run prisma:check`                    | Fail if migrations are pending or the schema drifted from them |
 | `npm run seed`                            | Replace all data with `prisma/seedData` in one transaction     |
 | `npm run db:up` / `npm run db:down`       | Start / stop the local database                                |
+| `npm run test:integration`                | Service tests against `<db>_test` (needs `db:up`)              |
 
 ## Rules
 
@@ -56,3 +57,5 @@ The image is `imresamu/postgis` (multi-arch builds from the official PostGIS ima
 - Write geospatial queries (PostGIS) with `prisma.$queryRaw` tagged templates and never with string-concatenated SQL. Keep them inside services.
 - Never edit an applied migration. `prisma migrate reset` needs explicit user consent; never bypass Prisma's consent guard.
 - Status codes: 200 read/update, 201 create, 204 delete, 400 validation, 401 unauthenticated, 403 forbidden, 404 not found.
+- Tests: `*.test.ts` are unit tests with every dependency mocked (`npm test`, no database). `*.int.test.ts` are integration tests that run services against real PostgreSQL + PostGIS (`npm run test:integration`). The test database is derived from `DATABASE_URL` with a `_test` suffix, then created, migrated and truncated per test by `src/test-utils`. Anything that relies on SQL behaviour (raw queries, PostGIS, transactions, relation writes) gets an integration test.
+- External services (S3 via `lib/photoStorage.ts`, Nominatim via `lib/geocoder.ts`, Cognito via `lib/tokenVerifier.ts`) sit behind small injected interfaces, created in `index.ts`. Services never construct clients themselves.

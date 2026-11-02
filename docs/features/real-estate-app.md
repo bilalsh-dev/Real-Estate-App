@@ -20,7 +20,7 @@ Work strictly in order. Status values are `todo`, `in-progress` and `done`.
 | F2 | Landing page | `23c7207` (part) | done |
 | F3 | Server foundation and database | `23c7207` (part) | done |
 | F4 | Authentication, profiles and settings | `23c7207` (part) | done |
-| F5 | Domain API: properties, leases, payments, applications | `1afdc77` | todo |
+| F5 | Domain API: properties, leases, payments, applications | `1afdc77` | done |
 | F6 | Search and property details UI | `cac6ce4` | todo |
 | F7 | Dashboard property pages | `0d81098` | todo |
 | F8 | Applications flow and cleanup | `b3de07e` | todo |
@@ -198,34 +198,63 @@ Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is
 
 **Goal:** the complete REST API.
 
-**Compare against:** `1afdc77`.
+**Compare against:** `1afdc77`. Later upstream commits only toggle the S3 upload off and on (`0d81098`, `3b4ed81`), add a missing-tenant 404 to add-favorite (`cac6ce4`), and add a debug log (`b3de07e`).
 
 **Endpoints**
-- `GET /properties`: filters `favoriteIds`, `priceMin`, `priceMax`, `beds`, `baths`, `propertyType`, `squareFeetMin`, `squareFeetMax`, `amenities`, `availableFrom`, `latitude`, `longitude` (PostGIS `ST_DWithin`, 1000 km radius)
-- `GET /properties/:id` (with location coordinates as GeoJSON)
-- `POST /properties` (manager): multipart `photos` uploaded to S3, then the address is geocoded with Nominatim and the location is created with `ST_MakePoint`
-- `GET /leases` and `GET /leases/:id/payments` (manager, tenant)
-- `GET /applications` (`userId`, `userType`), `POST /applications` (tenant), `PUT /applications/:id/status` (manager)
-- `GET /tenants/:cognitoId/current-residences`, `POST` and `DELETE /tenants/:cognitoId/favorites/:propertyId`
-- `GET /managers/:cognitoId/properties`
+- `GET /properties` (public): filters `favoriteIds`, `priceMin`, `priceMax`, `beds`, `baths`, `propertyType`, `squareFeetMin`, `squareFeetMax`, `amenities` (all must match), `availableFrom`, and `latitude` + `longitude` (PostGIS `ST_DWithin` on `geography`, 1000 km radius). Unknown keys such as `location` are ignored.
+- `GET /properties/:id` (public): includes the location coordinates as `{ longitude, latitude }`
+- `POST /properties` (manager): multipart `photos` (1–10 JPEG, PNG or WebP files, 5 MB each) are uploaded to S3. The address is geocoded with Nominatim, then the location (`ST_MakePoint`) and property are created in one transaction.
+- `GET /properties/:id/leases` (the property's manager)
+- `GET /leases` (tenant: their own leases; manager: leases on their properties) and `GET /leases/:id/payments` (the lease's tenant or manager)
+- `GET /applications` (scoped by the token's role), `POST /applications` (tenant), `PUT /applications/:id/status` (the property's manager; `Approved` or `Denied`)
+- `GET /tenants/:cognitoId/current-residences`, `POST` and `DELETE /tenants/:cognitoId/favorites/:propertyId` (self only)
+- `GET /managers/:cognitoId/properties` (self only)
 
 **Checklist**
-- [ ] Services, controllers and routes for properties, leases, applications, and the tenant and manager additions
-- [ ] `lib/s3.ts` upload helper, and Nominatim geocoding with a proper `User-Agent` header
-- [ ] Zod schemas for every query, params and body
-- [ ] Authorization: users can only read or modify their own resources
+- [x] Services, controllers and routers for properties, leases and applications, plus the tenant and manager additions. Every dependency (Prisma, geocoder, photo storage, clock) is injected.
+- [x] `lib/photoStorage.ts` (S3 via `@aws-sdk/lib-storage`, random object keys) and `lib/geocoder.ts` (Nominatim structured search with an identifying `User-Agent`)
+- [x] Zod schemas for every query, params and body (`schemas/property.ts`, `schemas/application.ts`, `schemas/common.ts`). Multipart fields are coerced: comma-separated arrays and `"true"`/`"false"` booleans.
+- [x] Authorization: users only read or modify their own resources
+- [x] Integration test setup: `npm run test:integration` runs `*.int.test.ts` against `<DATABASE_URL database>_test`, which is created and migrated automatically. The dev data is never touched.
+- [x] Ran it: the compiled server against the seeded dev DB returned all 10 properties; the radius, price + beds, amenity and favorite-id filters; the detail view with coordinates; 404, 400 and 401
 
 **Acceptance tests**
-- [ ] Property filter builder: each filter produces the expected SQL condition; omitted filters add nothing; all values are parameterized (no string interpolation)
-- [ ] `createProperty`: uploads every photo to S3, geocodes the address, and stores the returned coordinates and photo URLs; a geocoding miss returns 400 and nothing is persisted
-- [ ] `GET /properties/:id`: returns coordinates as `{ longitude, latitude }`; an unknown id returns 404
-- [ ] Favorites: adding twice is idempotent; removing a favorite that doesn't exist is a no-op; another tenant's favorites return 403
-- [ ] Applications: create stores a Pending application with **no** lease; approve creates exactly one lease, links it, and adds the tenant to the property; deny creates no lease; only the property's manager can change the status (otherwise 403)
-- [ ] Leases and payments: a tenant sees only their leases; a manager sees only leases on their properties
+- [x] `services/propertyFilters.test.ts`: each filter produces the expected SQL condition; omitted filters add nothing; all values are parameters (none appear in the SQL text)
+- [x] `services/propertyService.int.test.ts`:
+  - Search applies each filter on real PostGIS: price, rooms, size and type; every amenity; favorite ids; the 1000 km radius (Berlin finds Paris, not New York); and leased-on-date exclusion.
+  - `get` returns coordinates, and an unknown id gives 404.
+  - `create` uploads every photo, geocodes, and stores the coordinates and photo URLs. A geocoding miss returns 400 with nothing uploaded or persisted, and a missing manager persists nothing.
+  - `listByManager` and `listLeases` are scoped to the owner (403 for others).
+- [x] `services/tenantService.int.test.ts`: adding a favorite twice is idempotent; removing a missing favorite is a no-op; an unknown property or tenant gives 404; residences include coordinates
+- [x] `services/applicationService.int.test.ts`:
+  - Create stores a Pending application with **no** lease. A second pending application gives 409, and an unknown property gives 404.
+  - Approval creates exactly one lease (rent and deposit from the property, 1-year term), links it, and adds the tenant to the property.
+  - Denial creates no lease, and a reviewed application can't be reviewed again (409).
+  - Only the property's manager can review (403).
+  - The list is scoped per role and includes `manager` and the lease's `nextPaymentDate`.
+- [x] `services/leaseService.int.test.ts`: a tenant sees only their leases; a manager sees only leases on their properties; payments are visible only to the lease's tenant and manager (403 otherwise, 404 when missing)
+- [x] `routes/domain.test.ts` (supertest, services mocked):
+  - Query parsing, and 400s for invalid filters.
+  - Multipart create for the manager, where a body `managerCognitoId` is ignored. Tenants get 403. A missing photo, a non-image or an oversized photo, or an invalid body gives 400.
+  - Review is manager-only, and the status must be `Approved` or `Denied`. Applications use the token's user and ignore `userId` and `tenantCognitoId`.
+  - Leases require auth. Favorites, residences and managed properties are self-only.
+- [x] `lib/dates.test.ts` (month-end clamping, next payment date), `lib/geocoder.test.ts` (request shape, no match, error responses), `lib/photoStorage.test.ts` (key, content type, unsupported type, missing URL)
 
 **Deviations**
-- Upstream `createApplication` creates a lease when the tenant applies, and approval creates a second one. The lease is now created only on approval.
-- Ownership checks added; upstream lets any tenant read or modify any other tenant's data
+- **Security:** upstream's `GET /leases` returns every lease, and payments, applications, residences and favorites accept any user id. All of them are now scoped to the verified token, with ownership checks (403).
+- **Security:** `POST /properties` takes the manager from the token instead of the body. `POST /applications` takes the tenant from the token, and the server sets `status` and `applicationDate`. `GET /applications` ignores `userId`/`userType`.
+- Upstream `createApplication` creates a lease when the tenant applies, and approval creates a second one. The lease is now created only on approval, inside a transaction. Only Pending applications can be reviewed, guarded against concurrent reviews, and a tenant can have one pending application per property.
+- Upstream falls back to coordinates `[0, 0]` when geocoding fails. Ours returns 400 before uploading anything.
+- Upstream builds S3 keys from `Date.now()` and the client's file name. Ours uses random UUID keys, accepts only JPEG, PNG and WebP, and limits size and count.
+- `GET /properties/:id/leases` is added. The upstream client calls it, but upstream's server never implemented it.
+- Radius search uses `geography` and meters (`ST_DWithin`, 1000 km), instead of casting to `geometry` and an approximate degree conversion
+- `amenities` is cast to `"Amenity"[]`. Upstream compared an enum array to `text[]`, which Postgres rejects.
+- `availableFrom` returns properties with no lease covering that date. Upstream returned properties that had any lease starting before it.
+- Search returns full typed Prisma records (raw SQL selects only the matching ids) with coordinates attached in one batched query. Upstream used one query per property, `@terraformer/wkt` and `axios`, which are all dropped.
+- Applications no longer duplicate `property.address` (use `property.location.address`). `manager` and `lease.nextPaymentDate` are kept. Next payment dates clamp to month ends (Jan 31, then Feb 28).
+- Results are ordered: properties by id, leases by start date, payments by due date, applications newest first
+- The Nominatim `User-Agent` identifies the app with its repository URL instead of a placeholder email
+- Server env adds `AWS_REGION` and `S3_BUCKET_NAME`, both required. AWS credentials come from the SDK's default provider chain (an IAM role in production).
 
 ## F6: Search and property details UI
 

@@ -8,6 +8,8 @@ const valid = {
   DATABASE_URL: "postgresql://user:pass@db.example.com:5432/rentiful?schema=public",
   COGNITO_USER_POOL_ID: "eu-central-1_AbCdEf123",
   COGNITO_CLIENT_ID: "1example23456789abcdef",
+  AWS_REGION: "eu-central-1",
+  S3_BUCKET_NAME: "rentiful-photos",
 };
 
 describe("parseEnv", () => {
@@ -19,6 +21,8 @@ describe("parseEnv", () => {
       DATABASE_URL: valid.DATABASE_URL,
       COGNITO_USER_POOL_ID: valid.COGNITO_USER_POOL_ID,
       COGNITO_CLIENT_ID: valid.COGNITO_CLIENT_ID,
+      AWS_REGION: valid.AWS_REGION,
+      S3_BUCKET_NAME: valid.S3_BUCKET_NAME,
     });
   });
 
@@ -29,6 +33,8 @@ describe("parseEnv", () => {
     "CORS_ORIGINS",
     "COGNITO_USER_POOL_ID",
     "COGNITO_CLIENT_ID",
+    "AWS_REGION",
+    "S3_BUCKET_NAME",
   ] as const)("fails clearly when %s is missing", (key) => {
     const { [key]: _removed, ...rest } = valid;
     expect(() => parseEnv(rest)).toThrow(new RegExp(`Invalid environment[\\s\\S]*${key}`));
@@ -42,6 +48,8 @@ describe("parseEnv", () => {
     ["NODE_ENV", "staging"],
     ["COGNITO_USER_POOL_ID", "not-a-pool"],
     ["COGNITO_CLIENT_ID", "has spaces"],
+    ["AWS_REGION", "Frankfurt"],
+    ["S3_BUCKET_NAME", "Not_A_Bucket"],
   ])("rejects an invalid %s (%s)", (key, value) => {
     expect(() => parseEnv({ ...valid, [key]: value })).toThrow(/Invalid environment/);
   });

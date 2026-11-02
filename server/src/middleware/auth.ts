@@ -25,20 +25,21 @@ function readBearerToken(header: string | undefined): string | undefined {
   return header?.match(BEARER_PATTERN)?.[1];
 }
 
-export function createAuthMiddleware(verifyToken: TokenVerifier) {
-  return (allowedRoles: readonly Role[]): RequestHandler =>
-    async (req, _res, next) => {
-      const token = readBearerToken(req.headers.authorization);
-      if (!token) throw new UnauthorizedError("Missing bearer token");
+export type Authorize = (allowedRoles: readonly Role[]) => RequestHandler;
 
-      const { sub, role } = await verifyToken(token);
-      if (!isRole(role) || !allowedRoles.includes(role)) {
-        throw new ForbiddenError("Access denied");
-      }
+export function createAuthMiddleware(verifyToken: TokenVerifier): Authorize {
+  return (allowedRoles) => async (req, _res, next) => {
+    const token = readBearerToken(req.headers.authorization);
+    if (!token) throw new UnauthorizedError("Missing bearer token");
 
-      req.user = { id: sub, role };
-      next();
-    };
+    const { sub, role } = await verifyToken(token);
+    if (!isRole(role) || !allowedRoles.includes(role)) {
+      throw new ForbiddenError("Access denied");
+    }
+
+    req.user = { id: sub, role };
+    next();
+  };
 }
 
 export function requireUser(req: Request): AuthUser {

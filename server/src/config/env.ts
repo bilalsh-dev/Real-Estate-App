@@ -12,6 +12,8 @@ const envSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   COGNITO_USER_POOL_ID: z.string().regex(/^[a-z]{2}(-[a-z]+)+-\d_[0-9A-Za-z]+$/),
   COGNITO_CLIENT_ID: z.string().regex(/^[0-9A-Za-z]+$/),
+  AWS_REGION: z.string().regex(/^[a-z]{2}(-[a-z]+)+-\d$/),
+  S3_BUCKET_NAME: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/),
 });
 
 export type Env = z.infer<typeof envSchema>;

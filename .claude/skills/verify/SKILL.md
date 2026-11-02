@@ -11,7 +11,10 @@ For each of `client/` and `server/` that contains a `package.json`, run these sc
 2. `npm run typecheck`
 3. `npm run test`
 
-Then, in `server/`, run `npm run prisma:check` (start the database first with `npm run db:up` if it isn't running). It fails when migrations are pending or the schema has drifted from them.
+Then, in `server/`, start the database with `npm run db:up` if it isn't running, and run:
+
+4. `npm run test:integration`: the service integration tests against the `_test` database
+5. `npm run prisma:check`: fails when migrations are pending or the schema has drifted from them
 
 Rules:
 - Run every step, even after a failure, so the report is complete.

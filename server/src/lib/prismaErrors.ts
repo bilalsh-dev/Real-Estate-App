@@ -2,6 +2,7 @@ import { Prisma } from "../generated/prisma/client.ts";
 
 export const PrismaErrorCode = {
   UniqueConstraint: "P2002",
+  ForeignKeyConstraint: "P2003",
   RecordNotFound: "P2025",
 } as const;
 

@@ -65,7 +65,7 @@ Run these inside `client/` or `server/`:
 | `npm run test` | Vitest, single run |
 | `npm run format` | Prettier write |
 
-Server only: `npm run db:up`, `npm run prisma:migrate`, `npm run prisma:check`, `npm run seed` (see `server/CLAUDE.md`). The local database runs in Docker, so Docker Desktop must be running.
+Server only: `npm run db:up`, `npm run test:integration`, `npm run prisma:migrate`, `npm run prisma:check`, `npm run seed` (see `server/CLAUDE.md`). The local database runs in Docker, so Docker Desktop must be running.
 
 ## Conventions (both packages)
 

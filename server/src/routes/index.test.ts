@@ -19,15 +19,38 @@ const verifyToken: TokenVerifier = (token) => {
 
 const validBody = { name: "Ann", email: "ann@example.com", phoneNumber: "+1 555 0100" };
 
-function profileServiceMock() {
-  return { get: vi.fn(), create: vi.fn(), update: vi.fn() };
-}
+const tenantService = {
+  get: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
+  listResidences: vi.fn(),
+  addFavorite: vi.fn(),
+  removeFavorite: vi.fn(),
+};
+const managerService = { get: vi.fn(), create: vi.fn(), update: vi.fn() };
+const propertyService = {
+  search: vi.fn(),
+  get: vi.fn(),
+  create: vi.fn(),
+  listByManager: vi.fn(),
+  listLeases: vi.fn(),
+};
+const leaseService = { listForUser: vi.fn(), listPayments: vi.fn() };
+const applicationService = { listForUser: vi.fn(), create: vi.fn(), review: vi.fn() };
+
+const app = createApp(
+  config,
+  registerApiRoutes({
+    verifyToken,
+    tenantService,
+    managerService,
+    propertyService,
+    leaseService,
+    applicationService,
+  }),
+);
 
 describe("profile routes", () => {
-  const tenantService = profileServiceMock();
-  const managerService = profileServiceMock();
-  const app = createApp(config, registerApiRoutes({ verifyToken, tenantService, managerService }));
-
   beforeEach(() => {
     vi.resetAllMocks();
   });

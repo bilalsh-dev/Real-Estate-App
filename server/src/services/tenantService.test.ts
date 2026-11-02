@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Prisma, type PrismaClient } from "../generated/prisma/client.ts";
+import { Prisma } from "../generated/prisma/client.ts";
 import { ConflictError, NotFoundError } from "../lib/errors.ts";
 import { createTenantService } from "./tenantService.ts";
 
@@ -12,7 +12,7 @@ function prismaError(code: string) {
 
 describe("createTenantService", () => {
   const db = { tenant: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() } };
-  const service = createTenantService(db as unknown as Pick<PrismaClient, "tenant">);
+  const service = createTenantService(db as unknown as Parameters<typeof createTenantService>[0]);
 
   beforeEach(() => {
     vi.resetAllMocks();

@@ -1,9 +1,15 @@
+import { S3Client } from "@aws-sdk/client-s3";
 import { createApp } from "./app.ts";
 import { env } from "./config/env.ts";
+import { createNominatimGeocoder } from "./lib/geocoder.ts";
+import { createS3PhotoStorage } from "./lib/photoStorage.ts";
 import { prisma } from "./lib/prisma.ts";
 import { createCognitoIdTokenVerifier, createTokenVerifier } from "./lib/tokenVerifier.ts";
 import { registerApiRoutes } from "./routes/index.ts";
+import { createApplicationService } from "./services/applicationService.ts";
+import { createLeaseService } from "./services/leaseService.ts";
 import { createManagerService } from "./services/managerService.ts";
+import { createPropertyService } from "./services/propertyService.ts";
 import { createTenantService } from "./services/tenantService.ts";
 
 const app = createApp(
@@ -17,6 +23,16 @@ const app = createApp(
     ),
     tenantService: createTenantService(prisma),
     managerService: createManagerService(prisma),
+    propertyService: createPropertyService({
+      db: prisma,
+      geocode: createNominatimGeocoder(),
+      storage: createS3PhotoStorage({
+        client: new S3Client({ region: env.AWS_REGION }),
+        bucket: env.S3_BUCKET_NAME,
+      }),
+    }),
+    leaseService: createLeaseService(prisma),
+    applicationService: createApplicationService(prisma),
   }),
 );
 

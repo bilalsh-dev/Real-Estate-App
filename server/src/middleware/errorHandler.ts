@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
+import multer from "multer";
 import { HttpError, NotFoundError, ValidationError } from "../lib/errors.ts";
 
 const INTERNAL_ERROR_MESSAGE = "Internal server error";
@@ -20,6 +21,11 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, _ne
 
   if (error instanceof HttpError) {
     res.status(error.status).json({ message: error.message });
+    return;
+  }
+
+  if (error instanceof multer.MulterError) {
+    res.status(400).json({ message: error.message });
     return;
   }
 

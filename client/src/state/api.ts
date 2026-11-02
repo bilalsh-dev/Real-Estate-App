@@ -4,7 +4,9 @@ import { z } from "zod";
 import { UserRole } from "@/lib/constants";
 import { env } from "@/lib/env";
 import type { SettingsFormData } from "@/lib/schemas";
-import type { Manager, Tenant } from "@/types";
+import { cleanParams } from "@/lib/utils";
+import type { FiltersState } from "@/state/globalSlice";
+import type { Manager, Property, Tenant } from "@/types";
 
 const ROLE_CLAIM = "custom:role";
 
@@ -22,6 +24,35 @@ export type AuthUser = {
 };
 
 export type UpdateSettingsArgs = { cognitoId: string } & SettingsFormData;
+
+export type PropertySearchArgs = Partial<FiltersState> & { favoriteIds?: number[] };
+
+export type FavoriteArgs = { cognitoId: string; propertyId: number };
+
+const MAPBOX_GEOCODING_URL = "https://api.mapbox.com/search/geocode/v6/forward";
+
+const geocodingResponseSchema = z.object({
+  features: z.array(
+    z.object({ geometry: z.object({ coordinates: z.tuple([z.number(), z.number()]) }) }),
+  ),
+});
+
+export function toPropertyQueryParams(args: PropertySearchArgs): Record<string, string | number> {
+  return cleanParams({
+    favoriteIds: args.favoriteIds?.join(","),
+    priceMin: args.priceRange?.[0],
+    priceMax: args.priceRange?.[1],
+    beds: args.beds,
+    baths: args.baths,
+    propertyType: args.propertyType,
+    squareFeetMin: args.squareFeet?.[0],
+    squareFeetMax: args.squareFeet?.[1],
+    amenities: args.amenities?.join(","),
+    availableFrom: args.availableFrom,
+    longitude: args.coordinates?.[0],
+    latitude: args.coordinates?.[1],
+  }) as Record<string, string | number>;
+}
 
 function customError(message: string): { error: FetchBaseQueryError } {
   return { error: { status: "CUSTOM_ERROR", error: message } };
@@ -41,7 +72,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ["AuthUser"],
+  tagTypes: ["AuthUser", "Properties", "PropertyDetails", "Tenants"],
   endpoints: (build) => ({
     getAuthUser: build.query<AuthUser, void>({
       async queryFn(_arg, _queryApi, _extraOptions, fetchWithBaseQuery) {
@@ -101,6 +132,64 @@ export const api = createApi({
       }),
       invalidatesTags: ["AuthUser"],
     }),
+
+    getProperties: build.query<Property[], PropertySearchArgs>({
+      query: (args) => ({ url: "/properties", params: toPropertyQueryParams(args) }),
+      providesTags: (result) => [
+        ...(result ?? []).map(({ id }) => ({ type: "Properties" as const, id })),
+        { type: "Properties", id: "LIST" },
+      ],
+    }),
+
+    getProperty: build.query<Property, number>({
+      query: (id) => `/properties/${id}`,
+      providesTags: (_result, _error, id) => [{ type: "PropertyDetails", id }],
+    }),
+
+    getTenant: build.query<Tenant, string>({
+      query: (cognitoId) => profilePath(UserRole.Tenant, cognitoId),
+      providesTags: (_result, _error, cognitoId) => [{ type: "Tenants", id: cognitoId }],
+    }),
+
+    addFavoriteProperty: build.mutation<Tenant, FavoriteArgs>({
+      query: ({ cognitoId, propertyId }) => ({
+        url: `${profilePath(UserRole.Tenant, cognitoId)}/favorites/${propertyId}`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, { cognitoId }) => [
+        { type: "Tenants", id: cognitoId },
+        { type: "Properties", id: "LIST" },
+      ],
+    }),
+
+    removeFavoriteProperty: build.mutation<Tenant, FavoriteArgs>({
+      query: ({ cognitoId, propertyId }) => ({
+        url: `${profilePath(UserRole.Tenant, cognitoId)}/favorites/${propertyId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, { cognitoId }) => [
+        { type: "Tenants", id: cognitoId },
+        { type: "Properties", id: "LIST" },
+      ],
+    }),
+
+    geocodeLocation: build.query<FiltersState["coordinates"] | null, string>({
+      async queryFn(query) {
+        try {
+          const params = new URLSearchParams({
+            q: query,
+            limit: "1",
+            access_token: env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN,
+          });
+          const response = await fetch(`${MAPBOX_GEOCODING_URL}?${params.toString()}`);
+          if (!response.ok) return customError(`Location search failed (${response.status})`);
+          const { features } = geocodingResponseSchema.parse(await response.json());
+          return { data: features[0]?.geometry.coordinates ?? null };
+        } catch {
+          return customError("Location search failed");
+        }
+      },
+    }),
   }),
 });
 
@@ -108,4 +197,10 @@ export const {
   useGetAuthUserQuery,
   useUpdateTenantSettingsMutation,
   useUpdateManagerSettingsMutation,
+  useGetPropertiesQuery,
+  useGetPropertyQuery,
+  useGetTenantQuery,
+  useAddFavoritePropertyMutation,
+  useRemoveFavoritePropertyMutation,
+  useLazyGeocodeLocationQuery,
 } = api;

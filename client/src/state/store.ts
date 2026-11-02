@@ -1,8 +1,10 @@
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
 import { useDispatch, useSelector } from "react-redux";
 import { api } from "@/state/api";
+import { globalSlice } from "@/state/globalSlice";
 
 const rootReducer = combineReducers({
+  [globalSlice.name]: globalSlice.reducer,
   [api.reducerPath]: api.reducer,
 });
 

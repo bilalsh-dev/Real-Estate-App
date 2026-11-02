@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "@/state/api";
+import { api, toPropertyQueryParams } from "@/state/api";
 import { makeStore } from "@/state/store";
 
 vi.mock("aws-amplify/auth", () => ({ fetchAuthSession: vi.fn(), getCurrentUser: vi.fn() }));
@@ -154,5 +154,69 @@ describe("settings mutations", () => {
         body: { name: "Ann", email: "ann@example.com", phoneNumber: "+1 555 0100 22" },
       },
     ]);
+  });
+});
+
+describe("toPropertyQueryParams", () => {
+  it("maps filters to API query params and drops empty values", () => {
+    expect(
+      toPropertyQueryParams({
+        location: "Berlin",
+        coordinates: [13.4, 52.5],
+        priceRange: [1000, null],
+        squareFeet: [null, null],
+        beds: 2,
+        baths: null,
+        propertyType: "Villa",
+        amenities: ["Pool", "Gym"],
+        availableFrom: null,
+        favoriteIds: [3, 4],
+      }),
+    ).toEqual({
+      favoriteIds: "3,4",
+      priceMin: 1000,
+      beds: 2,
+      propertyType: "Villa",
+      amenities: "Pool,Gym",
+      longitude: 13.4,
+      latitude: 52.5,
+    });
+  });
+});
+
+describe("favorite mutations", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(fetchAuthSession).mockResolvedValue(session({ "custom:role": "tenant" }));
+  });
+
+  it.each([
+    ["addFavoriteProperty", "POST"],
+    ["removeFavoriteProperty", "DELETE"],
+  ] as const)("%s invalidates the tenant and the property list", async (endpoint, method) => {
+    const calls = stubFetch([
+      json(200, { ...tenant, favorites: [] }),
+      json(200, []),
+      json(200, tenant),
+      json(200, { ...tenant, favorites: [{ id: 9 }] }),
+      json(200, []),
+    ]);
+    const store = makeStore();
+    const tenantQuery = store.dispatch(api.endpoints.getTenant.initiate("user-1"));
+    const listQuery = store.dispatch(api.endpoints.getProperties.initiate({ beds: 2 }));
+    await Promise.all([tenantQuery, listQuery]);
+
+    await store.dispatch(api.endpoints[endpoint].initiate({ cognitoId: "user-1", propertyId: 9 }));
+    await vi.waitFor(() => expect(calls).toHaveLength(5));
+
+    expect(calls.map(({ method: m, url }) => `${m} ${url}`)).toEqual([
+      `GET ${API}/tenants/user-1`,
+      `GET ${API}/properties?beds=2`,
+      `${method} ${API}/tenants/user-1/favorites/9`,
+      `GET ${API}/tenants/user-1`,
+      `GET ${API}/properties?beds=2`,
+    ]);
+    tenantQuery.unsubscribe();
+    listQuery.unsubscribe();
   });
 });

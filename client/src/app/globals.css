@@ -253,3 +253,43 @@
 [data-amplify-authenticator] .amplify-text--error {
   color: var(--destructive);
 }
+
+.mapboxgl-popup-content {
+  @apply rounded-lg! bg-primary-700! px-3! py-2!;
+}
+
+.mapboxgl-popup-anchor-top .mapboxgl-popup-tip {
+  @apply border-b-primary-700!;
+}
+
+.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+  @apply border-t-primary-700!;
+}
+
+.mapboxgl-popup-anchor-left .mapboxgl-popup-tip {
+  @apply border-r-primary-700!;
+}
+
+.mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
+  @apply border-l-primary-700!;
+}
+
+.marker-popup {
+  @apply m-0 flex items-center gap-3 bg-primary-700 p-0 text-white;
+}
+
+.marker-popup-image {
+  @apply size-10 rounded-lg bg-white object-cover;
+}
+
+.marker-popup-title {
+  @apply cursor-pointer hover:text-blue-300 hover:underline focus:outline-none;
+}
+
+.marker-popup-price {
+  @apply text-sm font-semibold text-primary-200;
+}
+
+.marker-popup-price-unit {
+  @apply text-xs font-normal text-primary-500;
+}

@@ -160,3 +160,28 @@ export const SETTINGS_PATH: Record<UserRole, string> = {
   tenant: "/tenants/settings",
   manager: "/managers/settings",
 };
+
+export const DEFAULT_SEARCH_LOCATION = "Los Angeles";
+export const DEFAULT_SEARCH_COORDINATES: [longitude: number, latitude: number] = [-118.25, 34.05];
+
+export const MAP_STYLE = "mapbox://styles/mapbox/streets-v12";
+export const SEARCH_MAP_ZOOM = 9;
+export const PROPERTY_MAP_ZOOM = 14;
+export const MAP_MARKER_COLOR = "#000000";
+
+export const MIN_PRICE_OPTIONS = [500, 1000, 1500, 2000, 3000, 5000, 10000] as const;
+export const MAX_PRICE_OPTIONS = [1000, 2000, 3000, 5000, 10000] as const;
+export const BED_OPTIONS = [1, 2, 3, 4] as const;
+export const BATH_OPTIONS = [1, 2, 3] as const;
+
+export const PRICE_SLIDER = { min: 0, max: 10000, step: 100 } as const;
+export const SQUARE_FEET_SLIDER = { min: 0, max: 5000, step: 100 } as const;
+
+export const PLACEHOLDER_IMAGE = "/placeholder.jpg";
+
+export const ViewMode = {
+  Grid: "grid",
+  List: "list",
+} as const;
+
+export type ViewMode = (typeof ViewMode)[keyof typeof ViewMode];

@@ -21,7 +21,7 @@ Work strictly in order. Status values are `todo`, `in-progress` and `done`.
 | F3 | Server foundation and database | `23c7207` (part) | done |
 | F4 | Authentication, profiles and settings | `23c7207` (part) | done |
 | F5 | Domain API: properties, leases, payments, applications | `1afdc77` | done |
-| F6 | Search and property details UI | `cac6ce4` | todo |
+| F6 | Search and property details UI | `cac6ce4` | done |
 | F7 | Dashboard property pages | `0d81098` | todo |
 | F8 | Applications flow and cleanup | `b3de07e` | todo |
 | F9 | Deployment | `c2fc44a`, `89bcea4`, `3b4ed81`, `32828d8` | todo |
@@ -260,22 +260,46 @@ Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is
 
 **Goal:** the public search experience.
 
-**Compare against:** `cac6ce4`.
+**Compare against:** `cac6ce4`. The application modal on the details page comes in F8 (`b3de07e`).
 
 **Checklist**
-- [ ] `global` Redux slice (filters, full-filters toggle, view mode) synced to URL search params
-- [ ] `/search`: `FiltersBar` (location search, price, beds and baths, property type, grid or list toggle), `FiltersFull` side panel, `Map` (Mapbox GL markers with popups), `Listings` (`Card` or `CardCompact`, favorite toggle)
-- [ ] `/search/[id]`: `ImagePreviews` carousel, `PropertyOverview`, `PropertyDetails` (amenities, highlights, tabs), `PropertyLocation` (map), `ContactWidget`
-- [ ] RTK Query `getProperties`, `getProperty`, `getTenant`, `addFavoriteProperty`, `removeFavoriteProperty`, with cache tags
-- [ ] Mapbox popup styles in `globals.css`; `next.config.ts` remote image patterns
+- [x] `state/globalSlice.ts` (filters, full-filters toggle, view mode), synced with the URL through `lib/searchFilters.ts`. The URL is the source of truth: `SearchView` parses the search params, mirrors them into the slice, and queries with them. Filter changes `router.replace` the URL.
+- [x] `/search`: `FiltersBar` (location search, price, beds and baths, property type, grid or list toggle), `FiltersFull` side panel (draft state, Apply and Reset), `SearchMap` (Mapbox GL markers with popups), `Listings` (`Card` or `CardCompact`, favorite toggle for tenants)
+- [x] `/search/[id]`: `ImagePreviews` carousel of the property's photos, `PropertyOverview`, `PropertyDetails` (amenities, highlights, fee tabs), `PropertyLocation` (map + directions), `ContactWidget`
+- [x] RTK Query `getProperties`, `getProperty`, `getTenant`, `addFavoriteProperty`, `removeFavoriteProperty` with cache tags, plus `geocodeLocation` (Mapbox Geocoding v6) for the location search
+- [x] Mapbox popup styles in `globals.css`; `next.config.ts` remote image patterns (S3 `properties/` objects, and `example.com` for the seed data)
+- [x] Ran it in the browser against the seeded API:
+  - URL filters load (`beds=2` returns 4 results).
+  - The select filters update the URL, with one API request per change.
+  - The full panel applies an amenity.
+  - The map shows 8 markers within 1000 km of Los Angeles, and a marker opens its popup.
+  - The details page renders every section.
+  - Broken photo URLs fall back to the placeholder.
 
 **Acceptance tests**
-- [ ] Filters slice: each reducer updates only its own field; `setFilters` merges partial updates
-- [ ] URL sync: filters serialize to search params and parse back to the same state; invalid params are ignored
-- [ ] `Card` and `CardCompact`: render the price, beds, baths and square feet; the favorite button calls `onFavoriteToggle`; the button is hidden when `showFavoriteButton` is false
-- [ ] `Listings`: shows the result count and location, and renders the grid or list layout according to view mode
-- [ ] `ImagePreviews`: next and previous wrap around
-- [ ] RTK Query: toggling a favorite invalidates the tenant and property tags
+- [x] `state/globalSlice.test.ts`: each reducer updates only its own field; `setFilters` merges partial updates; `resetFilters` keeps the view mode
+- [x] `lib/searchFilters.test.ts`: filters serialize to search params (empty values omitted) and parse back to the same state; missing params fall back to defaults; 11 kinds of invalid params are ignored
+- [x] `components/Card.test.tsx` (both `Card` and `CardCompact`): render the price, beds, baths, square feet and link; the favorite button calls `onFavoriteToggle` and reflects `aria-pressed`; it is hidden when `showFavoriteButton` is false; without `propertyLink` the name is plain text
+- [x] `search/Listings.test.tsx`: shows the result count and location; renders full cards in grid view and compact cards in list view; hides favorites for visitors; a tenant adds and removes favorites
+- [x] `search/[id]/ImagePreviews.test.tsx`: next and previous wrap around; no photos shows the placeholder without navigation
+- [x] `state/api.test.ts`: adding and removing a favorite invalidates the tenant and the property list, so both refetch; `toPropertyQueryParams` maps filters to API params
+- [x] `search/SearchMap.test.tsx`: popups link to the property, and property names are rendered as text, never HTML
+- [x] `npm run build` succeeds (`/search` static, `/search/[id]` partially prerendered)
+
+**Deviations**
+- **Security:** upstream builds marker popups with `setHTML` and the property name, an XSS vector for any manager-entered name. Popups are now built with DOM nodes and `textContent`.
+- Filters are typed: `null` instead of `"any"` strings, `PropertyType`/`Amenity` unions, and an ISO date. The URL parser validates every param with Zod and ignores invalid ones; upstream copied raw strings into state.
+- One direction of sync, from the URL to the slice, instead of upstream's mount-only read plus debounced pushes. Upstream's `debounce` was recreated every render, so it never debounced. `lodash` is dropped.
+- The map is created once; markers update when results change and the map flies to new coordinates. Upstream destroyed and recreated the whole map on every result change. Markers use the `color` option instead of rewriting SVG paths.
+- The Mapbox style is `mapbox/streets-v12` instead of the tutorial author's private style. `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` is validated in `lib/env.ts` and passed per map.
+- Location search uses Mapbox Geocoding v6 through an RTK Query endpoint, with a toast when a location isn't found or the service fails. Upstream used the deprecated v5 API with `console.error`.
+- The details page loads the property once and passes it down. Upstream queried it in every section. The carousel shows the property's photos; upstream hard-coded two static images.
+- Removed fake content: the hard-coded marketing paragraph appended to every description, the "Verified Listing" badge, and the contact widget's fixed phone number, languages and opening hours. The widget shows "Sign In to Apply" (returning to the property after sign-in) to visitors. The tenant "Submit Application" button arrives with the modal in F8.
+- Favorites are shown only to tenants. Upstream showed them to managers too, whose clicks would fail.
+- Favorite mutations invalidate `Tenants` by Cognito id (upstream used the response id, which was missing on errors). Toggle failures show a toast.
+- Accessibility: labelled icon buttons, `aria-pressed` toggles, a labelled carousel and maps, and filter tiles as real buttons instead of clickable `div`s. "Next image" is labelled correctly (upstream labelled both buttons "Previous image").
+- `averageRating` and `numberOfReviews` are nullable in the schema and default to 0 in the UI (upstream crashed on `null.toFixed`)
+- Image fallback is handled in one `PropertyImage` component used by the cards and the carousel
 
 ## F7: Dashboard property pages
 

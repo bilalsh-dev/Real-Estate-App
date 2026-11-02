@@ -53,3 +53,29 @@ export function safeRedirectPath(path: string | null | undefined, fallback = "/"
 export function isWithinPath(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
+
+const dateFormatter = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
+const monthFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+export function formatDate(value: string | Date): string {
+  return dateFormatter.format(new Date(value));
+}
+
+export function formatMonth(value: string | Date): string {
+  return monthFormatter.format(new Date(value));
+}
+
+export function formatCurrency(value: number): string {
+  return currencyFormatter.format(value);
+}
+
+export function parseIdParam(value: string): number | null {
+  if (!/^\d+$/.test(value)) return null;
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}

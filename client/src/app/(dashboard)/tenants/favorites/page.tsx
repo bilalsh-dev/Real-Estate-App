@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Header } from "@/components/Header";
+import { FavoritesList } from "./FavoritesList";
 
 export const metadata: Metadata = {
   title: "Favorites | Rentiful",
@@ -7,10 +9,11 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <div className="dashboard-container">
-      <h1 className="text-xl font-semibold">Favorited Properties</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Browse and manage your saved property listings
-      </p>
+      <Header
+        title="Favorited Properties"
+        subtitle="Browse and manage your saved property listings"
+      />
+      <FavoritesList />
     </div>
   );
 }

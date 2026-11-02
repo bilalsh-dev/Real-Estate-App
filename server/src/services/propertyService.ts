@@ -1,4 +1,4 @@
-import type { Lease, PrismaClient, Property, Tenant } from "../generated/prisma/client.ts";
+import type { Lease, Payment, PrismaClient, Property, Tenant } from "../generated/prisma/client.ts";
 import { ForbiddenError, NotFoundError, ValidationError } from "../lib/errors.ts";
 import type { Geocoder } from "../lib/geocoder.ts";
 import type { PhotoFile, PhotoStorage } from "../lib/photoStorage.ts";
@@ -18,7 +18,10 @@ export type PropertyService = {
     photos: PhotoFile[],
   ): Promise<PropertyWithLocation>;
   listByManager(managerCognitoId: string): Promise<PropertyWithLocation[]>;
-  listLeases(propertyId: number, managerCognitoId: string): Promise<(Lease & { tenant: Tenant })[]>;
+  listLeases(
+    propertyId: number,
+    managerCognitoId: string,
+  ): Promise<(Lease & { tenant: Tenant; payments: Payment[] })[]>;
 };
 
 type PropertyServiceDependencies = {
@@ -109,7 +112,7 @@ export function createPropertyService({
       }
       return db.lease.findMany({
         where: { propertyId },
-        include: { tenant: true },
+        include: { tenant: true, payments: { orderBy: { dueDate: "asc" } } },
         orderBy: { startDate: "desc" },
       });
     },

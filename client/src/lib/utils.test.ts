@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import {
   cleanParams,
+  formatCurrency,
+  formatDate,
   formatEnumString,
+  formatMonth,
   formatPriceValue,
   isWithinPath,
+  parseIdParam,
   safeRedirectPath,
   withToast,
 } from "@/lib/utils";
@@ -102,5 +106,24 @@ describe("isWithinPath", () => {
     expect(isWithinPath("/tenants/settings", "/tenants")).toBe(true);
     expect(isWithinPath("/tenantsettings", "/tenants")).toBe(false);
     expect(isWithinPath("/managers", "/tenants")).toBe(false);
+  });
+});
+
+describe("date, currency and id helpers", () => {
+  it("formats dates and months in UTC", () => {
+    expect(formatDate("2026-03-01T00:00:00.000Z")).toBe("Mar 1, 2026");
+    expect(formatMonth("2026-03-01T00:00:00.000Z")).toBe("Mar 2026");
+    expect(formatCurrency(1234.5)).toBe("$1,234.50");
+  });
+
+  it.each([
+    ["12", 12],
+    ["0", null],
+    ["-1", null],
+    ["1.5", null],
+    ["abc", null],
+    ["99999999999999999999", null],
+  ])("parses the id param %s", (value, expected) => {
+    expect(parseIdParam(value)).toBe(expected);
   });
 });

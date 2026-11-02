@@ -220,16 +220,32 @@ describe("propertyService (database)", () => {
     it("lists a property's leases for its manager only", async () => {
       await createTenant("tenant-1");
       const property = await createProperty({ managerCognitoId: "mgr-1" });
-      await createLease({
+      const lease = await createLease({
         propertyId: property.id,
         tenantCognitoId: "tenant-1",
         startDate: new Date("2026-01-01"),
         endDate: new Date("2027-01-01"),
       });
+      for (const dueDate of ["2026-03-01", "2026-02-01"]) {
+        await prisma.payment.create({
+          data: {
+            leaseId: lease.id,
+            amountDue: 2000,
+            amountPaid: 2000,
+            dueDate: new Date(dueDate),
+            paymentDate: new Date(dueDate),
+            paymentStatus: "Paid",
+          },
+        });
+      }
 
       const leases = await service.listLeases(property.id, "mgr-1");
       expect(leases).toHaveLength(1);
       expect(leases[0]?.tenant.cognitoId).toBe("tenant-1");
+      expect(leases[0]?.payments.map(({ dueDate }) => dueDate.toISOString().slice(0, 10))).toEqual([
+        "2026-02-01",
+        "2026-03-01",
+      ]);
       await expect(service.listLeases(property.id, "mgr-2")).rejects.toBeInstanceOf(ForbiddenError);
       await expect(service.listLeases(999, "mgr-1")).rejects.toBeInstanceOf(NotFoundError);
     });

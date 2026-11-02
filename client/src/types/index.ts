@@ -72,6 +72,7 @@ export type Lease = {
   tenantCognitoId: string;
   property?: Property;
   tenant?: Tenant;
+  payments?: Payment[];
   nextPaymentDate?: string;
 };
 

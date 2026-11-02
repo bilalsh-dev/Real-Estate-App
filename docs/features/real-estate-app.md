@@ -22,7 +22,7 @@ Work strictly in order. Status values are `todo`, `in-progress` and `done`.
 | F4 | Authentication, profiles and settings | `23c7207` (part) | done |
 | F5 | Domain API: properties, leases, payments, applications | `1afdc77` | done |
 | F6 | Search and property details UI | `cac6ce4` | done |
-| F7 | Dashboard property pages | `0d81098` | todo |
+| F7 | Dashboard property pages | `0d81098` | done |
 | F8 | Applications flow and cleanup | `b3de07e` | todo |
 | F9 | Deployment | `c2fc44a`, `89bcea4`, `3b4ed81`, `32828d8` | todo |
 
@@ -308,17 +308,42 @@ Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is
 **Compare against:** `0d81098`.
 
 **Checklist**
-- [ ] `Header` and `Loading` components
-- [ ] Tenant: `/tenants/favorites`, `/tenants/residences`, `/tenants/residences/[id]` (lease, payment history, billing)
-- [ ] Manager: `/managers/properties`, `/managers/properties/[id]` (leases table, payment status), `/managers/newproperty` (React Hook Form + FilePond photo upload)
-- [ ] RTK Query `getCurrentResidences`, `getManagerProperties`, `createProperty`, `getLeases`, `getPropertyLeases`, `getPayments`
+- [x] `Header`, `Loading`, `QueryError`, `PropertyGrid` (with empty state), `PaymentStatusBadge`, and the `useFavorites` hook (shared with search `Listings`)
+- [x] Tenant: `/tenants/favorites` (removable favorites linking to the listing), `/tenants/residences`, `/tenants/residences/[id]` (lease card with status, next payment, and billing history)
+- [x] Manager: `/managers/properties`, `/managers/properties/[id]` (leases table with the current month's payment status), `/managers/newproperty` (React Hook Form + `PhotoUpload`)
+- [x] `FormField` extended: `multiline`, `SwitchField`, `SelectField`, `MultiChoiceField`, `PhotoField`
+- [x] RTK Query `getCurrentResidences`, `getManagerProperties`, `createProperty`, `getLeases`, `getPropertyLeases`, `getPayments`
+- [x] Server: `GET /properties/:id/leases` includes each lease's payments (ordered by due date), so the table needs one request instead of one per lease
+- [x] Ran it in the browser: production client plus a temporary API harness on the dev DB that trusted a local signing key, with sessions written to Amplify's storage.
+  - Tenant: the residences list and a residence with an ended lease and its billing history.
+  - Manager: a property's leases table, and creating a property. "No photo" was blocked; with a photo, the multipart POST returned 201 and the list refreshed.
+  - The test property was deleted afterwards.
 
 **Acceptance tests**
-- [ ] `Header` renders the title and subtitle
-- [ ] New property form: blocks submission without photos or required fields; builds `FormData` with each photo under `photos`, arrays as JSON, and `managerCognitoId`
-- [ ] Manager property detail: the leases table shows tenant, dates, rent and the current month's payment status
-- [ ] Tenant residence detail: shows the lease period, the next payment date, and the payment history sorted by date
-- [ ] Empty states: the favorites, residences and properties lists each show a message when empty
+- [x] `components/Header.test.tsx`: renders the title (h1) and subtitle
+- [x] `managers/newproperty/NewPropertyForm.test.tsx`: blocks submission without photos or required fields; submits `FormData` with each photo under `photos`, arrays comma-separated, and no `managerCognitoId`; redirects to the list; a selected photo can be removed. `lib/propertyFormData.test.ts` covers the builder.
+- [x] `managers/properties/[id]/PropertyLeasesView.test.tsx`: the leases table shows tenant, dates, rent, contact and the current month's payment status ("Not Paid" without a payment due this month); shows an empty state
+- [x] `tenants/residences/[id]/ResidenceView.test.tsx`: shows the lease period, the next payment date and the payment history newest first; fetches payments for that property's lease; explains when there is no lease
+- [x] `(dashboard)/dashboardLists.test.tsx`: the favorites, residences and properties lists each show a message when empty, and link to the right pages
+- [x] `lib/leases.test.ts`: next payment date (including month-end), current month status, payment sorting, latest lease per property
+- [x] `npm run build` succeeds (the three `[id]` dashboard routes are partially prerendered)
+
+**Deviations**
+- Upstream bugs fixed:
+  - The manager property page passed the property id to `getPayments` (which expects a lease id). Payments now come with the leases.
+  - The tenant residence page showed payments of the tenant's first lease for every property; it now uses that property's latest lease.
+  - The next payment showed the lease end date; it's now the next monthly date, or "None" for an inactive lease.
+  - Rent was labelled "/ night"; it's now "/ month".
+  - Favorites linked to the residence page; they now link to the listing.
+- Removed fake content: the hard-coded VISA payment method and billing email, the "Download", "Download All" and "Download Agreement" buttons (no backend), the "Manager" button, and the static tenant avatar image (an initial fallback is used instead)
+- Photo upload uses our own `PhotoUpload` (native multi-file input with previews, remove, de-duplication) instead of FilePond: `react-filepond` hasn't been updated since 2024 and its preview plugin since 2023. Client validation matches the server: JPEG, PNG or WebP, at most 10 photos of 5 MB each.
+- Arrays are sent comma-separated (what the F5 API parses). Upstream sent JSON strings, which its own server split on commas. `managerCognitoId` isn't sent; the server takes it from the token.
+- Amenities and highlights are multi-select toggle groups. Upstream used a single select, so only one value could be chosen.
+- After creating a property: a success or error toast and a redirect to My Properties, which refetches through the `Properties` list tag. Upstream stayed on the filled-in form.
+- `Loading` is inline (`role="status"`) instead of a fixed full-screen overlay
+- Dates use `Intl.DateTimeFormat` in UTC and currency uses `Intl.NumberFormat`, instead of locale-dependent `toLocaleDateString()`
+- The dashboard layout wraps `DashboardShell` in `<Suspense>`, because Cache Components requires `usePathname()` under a boundary on dynamic routes
+- The test setup adds a `ResizeObserver` stub (Radix Switch/Select need it in jsdom)
 
 ## F8: Applications flow and cleanup
 

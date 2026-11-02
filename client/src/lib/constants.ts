@@ -185,3 +185,7 @@ export const ViewMode = {
 } as const;
 
 export type ViewMode = (typeof ViewMode)[keyof typeof ViewMode];
+
+export const PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export const MAX_PHOTOS_PER_PROPERTY = 10;
+export const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024;

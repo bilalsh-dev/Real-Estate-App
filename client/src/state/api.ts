@@ -6,7 +6,7 @@ import { env } from "@/lib/env";
 import type { SettingsFormData } from "@/lib/schemas";
 import { cleanParams } from "@/lib/utils";
 import type { FiltersState } from "@/state/globalSlice";
-import type { Manager, Property, Tenant } from "@/types";
+import type { Lease, Manager, Payment, Property, Tenant } from "@/types";
 
 const ROLE_CLAIM = "custom:role";
 
@@ -72,7 +72,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ["AuthUser", "Properties", "PropertyDetails", "Tenants"],
+  tagTypes: ["AuthUser", "Properties", "PropertyDetails", "Tenants", "Leases", "Payments"],
   endpoints: (build) => ({
     getAuthUser: build.query<AuthUser, void>({
       async queryFn(_arg, _queryApi, _extraOptions, fetchWithBaseQuery) {
@@ -173,6 +173,42 @@ export const api = createApi({
       ],
     }),
 
+    getCurrentResidences: build.query<Property[], string>({
+      query: (cognitoId) => `${profilePath(UserRole.Tenant, cognitoId)}/current-residences`,
+      providesTags: (result) => [
+        ...(result ?? []).map(({ id }) => ({ type: "Properties" as const, id })),
+        { type: "Properties", id: "LIST" },
+      ],
+    }),
+
+    getManagerProperties: build.query<Property[], string>({
+      query: (cognitoId) => `${profilePath(UserRole.Manager, cognitoId)}/properties`,
+      providesTags: (result) => [
+        ...(result ?? []).map(({ id }) => ({ type: "Properties" as const, id })),
+        { type: "Properties", id: "LIST" },
+      ],
+    }),
+
+    createProperty: build.mutation<Property, FormData>({
+      query: (body) => ({ url: "/properties", method: "POST", body }),
+      invalidatesTags: [{ type: "Properties", id: "LIST" }],
+    }),
+
+    getLeases: build.query<Lease[], void>({
+      query: () => "/leases",
+      providesTags: ["Leases"],
+    }),
+
+    getPropertyLeases: build.query<Lease[], number>({
+      query: (propertyId) => `/properties/${propertyId}/leases`,
+      providesTags: ["Leases", "Payments"],
+    }),
+
+    getPayments: build.query<Payment[], number>({
+      query: (leaseId) => `/leases/${leaseId}/payments`,
+      providesTags: (_result, _error, leaseId) => [{ type: "Payments", id: leaseId }],
+    }),
+
     geocodeLocation: build.query<FiltersState["coordinates"] | null, string>({
       async queryFn(query) {
         try {
@@ -203,4 +239,10 @@ export const {
   useAddFavoritePropertyMutation,
   useRemoveFavoritePropertyMutation,
   useLazyGeocodeLocationQuery,
+  useGetCurrentResidencesQuery,
+  useGetManagerPropertiesQuery,
+  useCreatePropertyMutation,
+  useGetLeasesQuery,
+  useGetPropertyLeasesQuery,
+  useGetPaymentsQuery,
 } = api;

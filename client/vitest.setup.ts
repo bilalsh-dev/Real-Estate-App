@@ -15,7 +15,14 @@ class IntersectionObserverStub implements IntersectionObserver {
   }
 }
 
+class ResizeObserverStub implements ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
 globalThis.IntersectionObserver = IntersectionObserverStub;
+globalThis.ResizeObserver = ResizeObserverStub;
 
 afterEach(() => {
   cleanup();

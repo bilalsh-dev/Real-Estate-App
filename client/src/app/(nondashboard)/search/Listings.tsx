@@ -1,16 +1,9 @@
 "use client";
 
-import { skipToken } from "@reduxjs/toolkit/query";
 import { Card } from "@/components/Card";
 import { CardCompact } from "@/components/CardCompact";
-import { useAuthUser } from "@/hooks/use-auth-user";
-import { UserRole, ViewMode } from "@/lib/constants";
-import { withToast } from "@/lib/utils";
-import {
-  useAddFavoritePropertyMutation,
-  useGetTenantQuery,
-  useRemoveFavoritePropertyMutation,
-} from "@/state/api";
+import { useFavorites } from "@/hooks/use-favorites";
+import { ViewMode } from "@/lib/constants";
 import { useAppSelector } from "@/state/store";
 import type { Property } from "@/types";
 
@@ -21,20 +14,7 @@ type ListingsProps = {
 
 export function Listings({ properties, location }: ListingsProps) {
   const viewMode = useAppSelector((state) => state.global.viewMode);
-  const { data: authUser } = useAuthUser();
-  const tenantId = authUser?.userRole === UserRole.Tenant ? authUser.cognitoInfo.userId : null;
-  const { data: tenant } = useGetTenantQuery(tenantId ?? skipToken);
-  const [addFavorite] = useAddFavoritePropertyMutation();
-  const [removeFavorite] = useRemoveFavoritePropertyMutation();
-
-  const favoriteIds = new Set(tenant?.favorites?.map(({ id }) => id));
-
-  const toggleFavorite = (propertyId: number) => {
-    if (!tenantId) return;
-    const args = { cognitoId: tenantId, propertyId };
-    const request = favoriteIds.has(propertyId) ? removeFavorite(args) : addFavorite(args);
-    withToast(request.unwrap(), { error: "Could not update your favorites" }).catch(() => {});
-  };
+  const { canFavorite, favoriteIds, toggleFavorite } = useFavorites();
 
   const CardComponent = viewMode === ViewMode.Grid ? Card : CardCompact;
 
@@ -50,7 +30,7 @@ export function Listings({ properties, location }: ListingsProps) {
             property={property}
             isFavorite={favoriteIds.has(property.id)}
             onFavoriteToggle={() => toggleFavorite(property.id)}
-            showFavoriteButton={tenantId !== null}
+            showFavoriteButton={canFavorite}
             propertyLink={`/search/${property.id}`}
           />
         ))}

@@ -44,3 +44,12 @@ export async function withToast<T>(operation: Promise<T>, messages: ToastMessage
     throw error;
   }
 }
+
+export function safeRedirectPath(path: string | null | undefined, fallback = "/"): string {
+  if (!path?.startsWith("/") || path.startsWith("//") || path.includes("\\")) return fallback;
+  return path;
+}
+
+export function isWithinPath(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}

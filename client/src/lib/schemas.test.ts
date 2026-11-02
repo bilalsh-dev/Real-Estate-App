@@ -91,4 +91,17 @@ describe("settingsSchema", () => {
       settingsSchema.safeParse({ name: "", email: "a@b.co", phoneNumber: "5125550100" }).success,
     ).toBe(false);
   });
+
+  it.each(["+1 (512) 555-0100", "512.555.0100"])("accepts the phone number %s", (phoneNumber) => {
+    expect(settingsSchema.safeParse({ name: "Ann", email: "a@b.co", phoneNumber }).success).toBe(
+      true,
+    );
+  });
+
+  it("rejects letters in the phone number", () => {
+    expect(
+      settingsSchema.safeParse({ name: "Ann", email: "a@b.co", phoneNumber: "call me maybe" })
+        .success,
+    ).toBe(false);
+  });
 });

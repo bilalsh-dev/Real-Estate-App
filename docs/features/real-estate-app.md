@@ -19,7 +19,7 @@ Work strictly in order. Status values are `todo`, `in-progress` and `done`.
 | F1 | Client foundation | `23c7207` (part) | done |
 | F2 | Landing page | `23c7207` (part) | done |
 | F3 | Server foundation and database | `23c7207` (part) | done |
-| F4 | Authentication, profiles and settings | `23c7207` (part) | todo |
+| F4 | Authentication, profiles and settings | `23c7207` (part) | done |
 | F5 | Domain API: properties, leases, payments, applications | `1afdc77` | todo |
 | F6 | Search and property details UI | `cac6ce4` | todo |
 | F7 | Dashboard property pages | `0d81098` | todo |
@@ -45,8 +45,8 @@ Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is
 | server | `CORS_ORIGINS` | Comma-separated allowed browser origins (not in upstream) | F3 |
 | server | `DATABASE_URL` | PostgreSQL connection | F3 |
 | server | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Local Docker database only | F3 |
-| server | `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | JWT verification (not in upstream) | F4 |
-| server | `AWS_REGION` | S3 and Cognito region | F4 |
+| server | `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | ID token verification (not in upstream). The region is read from the pool ID. | F4 |
+| server | `AWS_REGION` | S3 region | F5 |
 | server | `S3_BUCKET_NAME` | Property photo bucket | F5 |
 
 ---
@@ -155,25 +155,44 @@ Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is
 **Compare against:** `23c7207`, files `client/src/app/(auth)/authProvider.tsx`, `src/app/(dashboard)/{layout.tsx,tenants/settings,managers/settings,tenants/favorites}`, `src/components/{AppSidebar,SettingsForm,FormField}.tsx`, `src/state/api.ts` (`getAuthUser`, `updateTenantSettings`, `updateManagerSettings`), `server/src/{middleware/authMiddleware.ts,routes/{tenant,manager}Routes.ts,controllers/{tenant,manager}Controllers.ts}`.
 
 **Checklist**
-- [ ] Amplify configuration from `lib/env.ts`; Authenticator with a custom `custom:role` radio on sign-up
-- [ ] Auth routing: `/signin` and `/signup` are only available signed out, and dashboard routes require sign-in
-- [ ] `getAuthUser`: fetch the Cognito session, then `GET /{role}s/:cognitoId`, creating the user on 404
-- [ ] Server: `authMiddleware(roles)` verifying the token with `aws-jwt-verify`
-- [ ] `GET/POST/PUT /tenants`, `GET/POST/PUT /managers`, each with Zod validation and a service layer
-- [ ] Dashboard layout with `AppSidebar` (role-based links), `SettingsForm` for both roles, and a favorites page placeholder
-- [ ] Amplify UI overrides and `.dashboard-container` styles in `globals.css`
+- [x] Amplify configuration from `lib/env.ts` (`lib/amplify.ts`), `Authenticator.Provider` in `providers.tsx`, and an `Authenticator` with a `custom:role` radio on sign-up, validated by `validateCustomSignUp`
+- [x] Auth routing: `/signin` and `/signup` (`(auth)` route group) redirect signed-in users to the `next` path, or `/` if `next` is unsafe. Dashboard routes redirect signed-out visitors to `/signin?next=<path>` and send users of the other role to their own dashboard home.
+- [x] `getAuthUser`: fetch the Cognito session, then `GET /{role}s/:cognitoId`, creating the user on 404
+- [x] Server: `createAuthMiddleware(verifyToken)(roles)` verifies the Cognito ID token with `aws-jwt-verify`
+- [x] `GET/POST/PUT /tenants`, `GET/POST/PUT /managers`: routes, then a shared profile controller, then tenant and manager services. Zod validation runs through `withValidation`.
+- [x] Dashboard layout (`DashboardShell`) with `AppSidebar` (role-based links), `SettingsForm` + `FormField` for both roles, and a favorites page placeholder
+- [x] Auth-aware `Navbar`: a `public` or `dashboard` variant, an account menu, the role action button and the mobile sidebar trigger
+- [x] Amplify UI overrides and `.dashboard-container` styles in `globals.css`
+- [x] Ran it:
+  - Server against the real DB, with a local signing key standing in for Cognito's JWKS: 404, then 201, 409, 200 read, 200 update, 400, 403 for another user, 403 for the wrong role, and 401 for forged or missing tokens.
+  - Client production build in the browser: the signed-out dashboard redirects to sign-in, the sign-in and sign-up forms render with the role radio, and there are no console errors.
 
 **Acceptance tests**
-- [ ] `authMiddleware`: a missing token gets 401; an invalid signature or expired token gets 401; a valid token with a disallowed role gets 403; a valid token with an allowed role sets `req.user` and calls `next`
-- [ ] Tenant and manager services: get returns the user or a not-found error; create persists; update changes only name, email and phone
-- [ ] Routes (supertest, verifier mocked): `GET /tenants/:cognitoId` for another user's id returns 403; an invalid body returns 400 with field errors
-- [ ] `getAuthUser`: creates the DB user when the profile fetch returns 404, and returns `{ cognitoInfo, userInfo, userRole }`
-- [ ] `AppSidebar`: the tenant role shows Favorites, Applications, Residences and Settings; the manager role shows Properties, Applications and Settings; the active link is highlighted
-- [ ] `SettingsForm`: starts read-only, enables editing on toggle, blocks submission on invalid input, and submits valid data
+- [x] `middleware/auth.test.ts`: a missing or malformed token gets 401; a token the verifier rejects gets 401; a disallowed, missing, unknown or differently cased role gets 403; an allowed role sets `req.user` and calls `next`
+- [x] `lib/tokenVerifier.test.ts` (real `aws-jwt-verify` with a local JWKS): a valid token returns `{ sub, role }`; a forged signature, an expired token, another client, another issuer, an access token or a malformed token is rejected as 401; JWKS fetch failures are not masked as 401
+- [x] `services/{tenant,manager}Service.test.ts`: get returns the user or a not-found error; create persists for the given Cognito id (duplicate gets 409); update changes only name, email and phone (an unknown user gets 404); unexpected errors are rethrown
+- [x] `routes/index.test.ts` (supertest, verifier mocked): another user's id gets 403 for GET and PUT; a tenant on `/managers` gets 403; an invalid body gets 400 with per-field `issues`; POST uses the token's `sub`, never a body `cognitoId`; an empty phone is allowed on sign-up
+- [x] `state/api.test.ts`: `getAuthUser` returns `{ cognitoInfo, userInfo, userRole }` and sends the bearer ID token; it creates the DB user when the profile fetch returns 404; it fails without an API call when the role is invalid, and surfaces non-404 API errors; the settings mutations send only the settings fields
+- [x] `components/AppSidebar.test.tsx`: the tenant role shows Favorites, Applications, Residences and Settings; the manager role shows Properties, Applications and Settings; only the active link is highlighted (`aria-current`)
+- [x] `components/SettingsForm.test.tsx`: starts read-only; enables editing on toggle and restores values on cancel; blocks submission on invalid input; submits valid data and returns to read-only; stays in edit mode when saving fails
+- [x] `components/Navbar.test.tsx` and `(dashboard)/_components/DashboardShell.test.tsx`: the signed-out, loading and signed-in states; sign-out; the role action; the redirects for signed-out visitors and the wrong role; the retry on load failure
+- [x] `npm run build` succeeds
 
 **Deviations**
-- **Security:** upstream uses `jwt.decode` with no signature check, which lets anyone forge a role. Replaced with verified tokens.
-- Server env adds `COGNITO_USER_POOL_ID` and `COGNITO_CLIENT_ID`
+- **Security:** upstream uses `jwt.decode` with no signature check, which lets anyone forge a role. Replaced with `aws-jwt-verify`, which checks the signature, issuer, audience, expiry and `token_use: id`.
+- **Security:** ownership checks. A user can only read or update their own profile (403 otherwise), and POST takes the Cognito id from the verified token, not the request body. Upstream lets any tenant read or overwrite any other tenant.
+- Server env adds `COGNITO_USER_POOL_ID` and `COGNITO_CLIENT_ID`. `AWS_REGION` moves to F5, because the verifier reads the region from the pool ID.
+- Roles are compared exactly (`tenant`, `manager`). Upstream lowercases the role and returns 400 for undecodable tokens; ours returns 401.
+- Errors go through the central error handler with specific status codes: 404, 409 for a duplicate profile, and 400 with `issues`. Upstream returns 500 with the raw Prisma message.
+- Upstream's `invalidatesTags` never matched a provided tag, so settings updates didn't refresh the UI. `getAuthUser` now provides the `AuthUser` tag that the mutations invalidate. Saves show success and error toasts.
+- Signing out resets the RTK Query cache and navigates client-side instead of a full reload. The Navbar only calls `getAuthUser` once Amplify reports `authenticated`, so public pages make no failing API calls.
+- The Navbar takes a `variant` prop instead of sniffing the pathname. The fake message and notification icons, with permanent unread dots, are dropped because no feature backs them.
+- Auth pages are real routes (`(auth)/signin`, `(auth)/signup`) instead of a pathname check that wraps every page. Upstream sends signed-out dashboard visitors to an inline Authenticator; we redirect to `/signin?next=` and return them afterwards, with an open-redirect guard (`safeRedirectPath`).
+- The sign-in field is labelled "Username or email", because Cognito accepts the username there. Sign-up requires a role through `validateCustomSignUp`; upstream relied on `isRequired` alone.
+- Phone numbers: the client and server both allow only digits, spaces and `+ ( ) . -`. The server accepts an empty phone on profile creation (Cognito sign-up collects none).
+- `FormField` is rebuilt on the shadcn `field` primitives with RHF `Controller` and covers text inputs only. F7 extends it for the property form.
+- The dashboard shows "Loading…", or a retry button if the account fails to load, instead of rendering nothing.
+- Amplify CSS overrides use the oklch theme tokens directly (upstream used `hsl(var(--x))` from shadcn v3). `!important` is kept only where Amplify's stylesheet, which loads later, would win.
 
 ## F5: Domain API
 

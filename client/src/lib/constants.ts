@@ -141,3 +141,22 @@ export const UserRole = {
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
 export const NAVBAR_HEIGHT_PX = 52;
+
+export const SIGN_IN_PATH = "/signin";
+export const SIGN_UP_PATH = "/signup";
+export const REDIRECT_PARAM = "next";
+
+export const DASHBOARD_PREFIX: Record<UserRole, string> = {
+  tenant: "/tenants",
+  manager: "/managers",
+};
+
+export const DASHBOARD_HOME: Record<UserRole, string> = {
+  tenant: "/tenants/favorites",
+  manager: "/managers/properties",
+};
+
+export const SETTINGS_PATH: Record<UserRole, string> = {
+  tenant: "/tenants/settings",
+  manager: "/managers/settings",
+};

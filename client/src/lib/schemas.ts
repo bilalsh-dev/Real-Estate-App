@@ -6,10 +6,14 @@ const MAX_ROOMS = 10;
 
 const requiredString = (label: string) => z.string().trim().min(1, `${label} is required`);
 
+const MAX_PHONE_LENGTH = 32;
+
 const phoneNumber = z
   .string()
   .trim()
-  .min(MIN_PHONE_DIGITS, `Phone number must be at least ${MIN_PHONE_DIGITS} digits`);
+  .min(MIN_PHONE_DIGITS, `Phone number must be at least ${MIN_PHONE_DIGITS} digits`)
+  .max(MAX_PHONE_LENGTH)
+  .regex(/^[+\d\s().-]*$/, "Phone number may only contain digits, spaces and + ( ) . -");
 
 export const propertySchema = z.object({
   name: requiredString("Name"),

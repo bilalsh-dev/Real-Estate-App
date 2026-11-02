@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
-import { cleanParams, formatEnumString, formatPriceValue, withToast } from "@/lib/utils";
+import {
+  cleanParams,
+  formatEnumString,
+  formatPriceValue,
+  isWithinPath,
+  safeRedirectPath,
+  withToast,
+} from "@/lib/utils";
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -73,5 +80,27 @@ describe("withToast", () => {
   it("stays silent when no messages are given", async () => {
     await withToast(Promise.resolve("ok"), {});
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("safeRedirectPath", () => {
+  it("keeps internal paths", () => {
+    expect(safeRedirectPath("/tenants/settings?tab=1")).toBe("/tenants/settings?tab=1");
+  });
+
+  it.each([null, undefined, "", "https://evil.example", "//evil.example", "/\\evil.example"])(
+    "falls back for %s",
+    (path) => {
+      expect(safeRedirectPath(path)).toBe("/");
+    },
+  );
+});
+
+describe("isWithinPath", () => {
+  it("matches the prefix itself and its children only", () => {
+    expect(isWithinPath("/tenants", "/tenants")).toBe(true);
+    expect(isWithinPath("/tenants/settings", "/tenants")).toBe(true);
+    expect(isWithinPath("/tenantsettings", "/tenants")).toBe(false);
+    expect(isWithinPath("/managers", "/tenants")).toBe(false);
   });
 });

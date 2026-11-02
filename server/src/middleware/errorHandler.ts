@@ -1,5 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
-import { HttpError, NotFoundError } from "../lib/errors.ts";
+import { HttpError, NotFoundError, ValidationError } from "../lib/errors.ts";
 
 const INTERNAL_ERROR_MESSAGE = "Internal server error";
 const MALFORMED_JSON_MESSAGE = "Malformed JSON body";
@@ -13,6 +13,11 @@ export const notFoundHandler: RequestHandler = (req, _res, next) => {
 };
 
 export const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, _next) => {
+  if (error instanceof ValidationError) {
+    res.status(error.status).json({ message: error.message, issues: error.issues });
+    return;
+  }
+
   if (error instanceof HttpError) {
     res.status(error.status).json({ message: error.message });
     return;

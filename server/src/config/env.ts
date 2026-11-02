@@ -10,6 +10,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535),
   CORS_ORIGINS: corsOrigins,
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  COGNITO_USER_POOL_ID: z.string().regex(/^[a-z]{2}(-[a-z]+)+-\d_[0-9A-Za-z]+$/),
+  COGNITO_CLIENT_ID: z.string().regex(/^[0-9A-Za-z]+$/),
 });
 
 export type Env = z.infer<typeof envSchema>;

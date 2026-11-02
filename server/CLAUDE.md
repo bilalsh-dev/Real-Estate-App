@@ -7,12 +7,14 @@ Read the root `CLAUDE.md` first. This file adds the backend-specific rules.
 ```
 src/index.ts          Starts the HTTP server and handles graceful shutdown (SIGTERM/SIGINT)
 src/app.ts            createApp(config, registerRoutes): middleware, routes, 404 and error handler; testable without listen
-src/config/           env.ts (Zod-validated env, parseEnv), constants.ts
-src/routes/           One router per resource: tenants, managers, properties, leases, applications
-src/controllers/      HTTP handlers; no Prisma imports
-src/services/         Business logic and data access
-src/middleware/       errorHandler, auth (Cognito JWT verification), validation
-src/lib/              prisma.ts (singleton client), errors.ts (HttpError, NotFoundError), s3.ts
+src/config/           env.ts (Zod-validated env, parseEnv), constants.ts (Role, ROLE_CLAIM)
+src/routes/           index.ts (registerApiRoutes(deps)), one router per resource
+src/controllers/      HTTP handlers built from injected services; no Prisma imports
+src/services/         Business logic and data access, created with an injected Prisma client
+src/schemas/          Zod schemas for params, query and body
+src/middleware/       errorHandler, auth (createAuthMiddleware, requireUser, assertSelf), validate (withValidation)
+src/lib/              prisma.ts (singleton client), errors.ts (HttpError subclasses), tokenVerifier.ts, prismaErrors.ts
+src/test-utils/       Test helpers (local JWT signing), excluded from the build
 src/generated/prisma/ Generated Prisma client (gitignored, created by `postinstall`)
 prisma/               schema.prisma, migrations, seed.ts, seedOrder.ts, seedData/*.json
 prisma.config.ts      Prisma 7 config: schema, migrations, seed command, datasource URL
@@ -46,9 +48,11 @@ The image is `imresamu/postgis` (multi-arch builds from the official PostGIS ima
 - Env files load through Node's `--env-file-if-exists` (scripts) and `process.loadEnvFile` (`prisma.config.ts`). There is no `dotenv` dependency.
 - Prisma 7: the `prisma-client` generator outputs to `src/generated/prisma`. Import from `../generated/prisma/client.ts`. The client is constructed with the `@prisma/adapter-pg` driver adapter. Use the `prisma-cli` and `prisma-client-api` skills for Prisma work, and `prisma-upgrade-v7` for v7 API questions.
 - Express 5 forwards rejected promises from async handlers to the error middleware, so don't wrap handlers in try/catch just to call `next`. Throw `HttpError` subclasses for expected failures. The central error handler shapes every error as `{ message }` and never leaks internal error details.
-- Mount routers through the `registerRoutes` callback of `createApp`, so the 404 and error handlers stay last.
-- Every route that takes input validates `params`, `query` and `body` with a Zod schema through the validation middleware.
-- Use the auth middleware `authMiddleware(roles)` for role checks. Role comes from the verified `custom:role` claim.
+- Mount routers through `registerApiRoutes(deps)`, passed to `createApp` as `registerRoutes`, so the 404 and error handlers stay last. Dependencies (token verifier, services) are injected there and built in `index.ts`, so tests can swap them.
+- Every route that takes input wraps its handler in `withValidation({ params, query, body }, handler)`. The handler receives the parsed, typed values; failures become 400 `{ message, issues: [{ path, message }] }`.
+- Role checks use `authorize([Role.Tenant])` from `createAuthMiddleware(verifyToken)`. The verifier checks the Cognito ID token (signature, issuer, audience, expiry). The role comes from the verified `custom:role` claim and `req.user` holds `{ id, role }`.
+- Ownership: a route keyed by `:cognitoId` calls `assertSelf(req, cognitoId)`. A create route takes the user's id from `requireUser(req)`, never from the body.
+- Map Prisma errors to HTTP errors in services with `hasPrismaErrorCode` (P2002 to 409, P2025 to 404).
 - Write geospatial queries (PostGIS) with `prisma.$queryRaw` tagged templates and never with string-concatenated SQL. Keep them inside services.
 - Never edit an applied migration. `prisma migrate reset` needs explicit user consent; never bypass Prisma's consent guard.
 - Status codes: 200 read/update, 201 create, 204 delete, 400 validation, 401 unauthenticated, 403 forbidden, 404 not found.

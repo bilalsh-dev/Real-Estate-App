@@ -1,12 +1,20 @@
 import { createApi, fetchBaseQuery, type FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
 import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth";
 import { z } from "zod";
-import { UserRole } from "@/lib/constants";
+import { UserRole, type ApplicationStatus } from "@/lib/constants";
 import { env } from "@/lib/env";
-import type { SettingsFormData } from "@/lib/schemas";
+import type { ApplicationFormData, SettingsFormData } from "@/lib/schemas";
 import { cleanParams } from "@/lib/utils";
 import type { FiltersState } from "@/state/globalSlice";
-import type { Lease, Manager, Payment, Property, Tenant } from "@/types";
+import type {
+  Application,
+  ApplicationListItem,
+  Lease,
+  Manager,
+  Payment,
+  Property,
+  Tenant,
+} from "@/types";
 
 const ROLE_CLAIM = "custom:role";
 
@@ -28,6 +36,13 @@ export type UpdateSettingsArgs = { cognitoId: string } & SettingsFormData;
 export type PropertySearchArgs = Partial<FiltersState> & { favoriteIds?: number[] };
 
 export type FavoriteArgs = { cognitoId: string; propertyId: number };
+
+export type CreateApplicationArgs = { propertyId: number } & ApplicationFormData;
+
+export type ReviewApplicationArgs = {
+  id: number;
+  status: typeof ApplicationStatus.Approved | typeof ApplicationStatus.Denied;
+};
 
 const MAPBOX_GEOCODING_URL = "https://api.mapbox.com/search/geocode/v6/forward";
 
@@ -72,7 +87,15 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ["AuthUser", "Properties", "PropertyDetails", "Tenants", "Leases", "Payments"],
+  tagTypes: [
+    "AuthUser",
+    "Properties",
+    "PropertyDetails",
+    "Tenants",
+    "Leases",
+    "Payments",
+    "Applications",
+  ],
   endpoints: (build) => ({
     getAuthUser: build.query<AuthUser, void>({
       async queryFn(_arg, _queryApi, _extraOptions, fetchWithBaseQuery) {
@@ -209,6 +232,32 @@ export const api = createApi({
       providesTags: (_result, _error, leaseId) => [{ type: "Payments", id: leaseId }],
     }),
 
+    getApplications: build.query<ApplicationListItem[], void>({
+      query: () => "/applications",
+      providesTags: (result) => [
+        ...(result ?? []).map(({ id }) => ({ type: "Applications" as const, id })),
+        { type: "Applications", id: "LIST" },
+      ],
+    }),
+
+    createApplication: build.mutation<Application, CreateApplicationArgs>({
+      query: (body) => ({ url: "/applications", method: "POST", body }),
+      invalidatesTags: [{ type: "Applications", id: "LIST" }],
+    }),
+
+    reviewApplication: build.mutation<Application, ReviewApplicationArgs>({
+      query: ({ id, status }) => ({
+        url: `/applications/${id}/status`,
+        method: "PUT",
+        body: { status },
+      }),
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: "Applications", id },
+        { type: "Applications", id: "LIST" },
+        "Leases",
+      ],
+    }),
+
     geocodeLocation: build.query<FiltersState["coordinates"] | null, string>({
       async queryFn(query) {
         try {
@@ -245,4 +294,7 @@ export const {
   useGetLeasesQuery,
   useGetPropertyLeasesQuery,
   useGetPaymentsQuery,
+  useGetApplicationsQuery,
+  useCreateApplicationMutation,
+  useReviewApplicationMutation,
 } = api;

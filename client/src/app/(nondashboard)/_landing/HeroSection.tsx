@@ -6,16 +6,21 @@ import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useLocate } from "@/hooks/use-locate";
+import { SEARCH_PATH } from "@/lib/constants";
+import { filtersToSearchParams } from "@/lib/searchFilters";
+import { DEFAULT_FILTERS } from "@/state/globalSlice";
 
 export function HeroSection() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const { locate, isLocating } = useLocate();
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const location = query.trim();
-    if (!location) return;
-    router.push(`/search?${new URLSearchParams({ location })}`);
+    const place = await locate(query);
+    if (!place) return;
+    router.push(`${SEARCH_PATH}?${filtersToSearchParams({ ...DEFAULT_FILTERS, ...place })}`);
   };
 
   return (
@@ -42,7 +47,11 @@ export function HeroSection() {
           <p className="mb-8 text-xl text-white">
             Explore our wide range of rental properties tailored to fit your lifestyle and needs!
           </p>
-          <form role="search" onSubmit={handleSubmit} className="flex justify-center">
+          <form
+            role="search"
+            onSubmit={(event) => void handleSubmit(event)}
+            className="flex justify-center"
+          >
             <Input
               type="search"
               aria-label="Search location"
@@ -53,6 +62,7 @@ export function HeroSection() {
             />
             <Button
               type="submit"
+              disabled={isLocating}
               className="h-12 rounded-none rounded-r-xl border-none bg-secondary-500 text-white hover:bg-secondary-600"
             >
               Search

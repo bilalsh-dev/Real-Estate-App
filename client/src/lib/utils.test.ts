@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import {
+  apiErrorMessage,
   cleanParams,
   formatCurrency,
   formatDate,
@@ -84,6 +85,22 @@ describe("withToast", () => {
   it("stays silent when no messages are given", async () => {
     await withToast(Promise.resolve("ok"), {});
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("apiErrorMessage", () => {
+  it("uses the API message for client errors", () => {
+    const error = { status: 409, data: { message: "Already applied" } };
+    expect(apiErrorMessage(error, "Failed")).toBe("Already applied");
+  });
+
+  it.each([
+    { status: 500, data: { message: "Internal server error" } },
+    { status: "FETCH_ERROR", error: "offline" },
+    { status: 400, data: "bad" },
+    new Error("boom"),
+  ])("falls back for %o", (error) => {
+    expect(apiErrorMessage(error, "Failed")).toBe("Failed");
   });
 });
 

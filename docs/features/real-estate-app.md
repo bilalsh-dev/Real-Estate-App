@@ -23,7 +23,7 @@ Work strictly in order. Status values are `todo`, `in-progress` and `done`.
 | F5 | Domain API: properties, leases, payments, applications | `1afdc77` | done |
 | F6 | Search and property details UI | `cac6ce4` | done |
 | F7 | Dashboard property pages | `0d81098` | done |
-| F8 | Applications flow and cleanup | `b3de07e` | todo |
+| F8 | Applications flow and cleanup | `b3de07e` | done |
 | F9 | Deployment | `c2fc44a`, `89bcea4`, `3b4ed81`, `32828d8` | todo |
 
 Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is split into F1–F4.
@@ -352,22 +352,49 @@ Upstream's first commit (`23c7207`, 107 files) bundles four milestones, so it is
 **Compare against:** `b3de07e`.
 
 **Checklist**
-- [ ] `ApplicationModal` on the property page (tenant only)
-- [ ] `ApplicationCard`; `/tenants/applications` and `/managers/applications` with status tabs, approve and deny actions, and a lease link
-- [ ] Hero search navigates to `/search` with the geocoded location
-- [ ] Root redirect: signed-in managers go to `/managers/properties`
-- [ ] RTK Query `getApplications`, `createApplication`, `updateApplicationStatus`
+- [x] `ApplicationModal` on the property page (tenants only), prefilled from the tenant's profile. `ContactWidget` shows "pending review" with a link instead of the button when the tenant already has a pending application for that property.
+- [x] `ApplicationCard` and `ApplicationStatusBadge` (shared). `/tenants/applications` shows a status note per application and links to the listing or the residence. `/managers/applications` has All, Pending, Approved and Denied tabs with counts. Approve and Deny ask for confirmation first.
+- [x] Hero search geocodes the location and opens `/search` with `location` and `coordinates`. The geocode-and-toast logic moved into `hooks/use-locate.ts`, which the search bar also uses.
+- [x] `(nondashboard)/_components/ManagerRedirect`: signed-in managers on `/` or `/search/*` go to `/managers/properties`
+- [x] RTK Query `getApplications`, `createApplication`, `reviewApplication` (`Applications` tag; a review also invalidates `Leases`)
+- [x] Server: `lease.nextPaymentDate` in `GET /applications` is `null` once the lease has ended
+- [x] Ran it in the browser (production client plus the temporary local-auth API harness on the dev DB):
+  - The tenant (Carol) applied to property 3. The form was prefilled, the POST returned 201, and the widget switched to "pending review".
+  - The tenant applications page listed the new and the old applications.
+  - The manager (manager3) was redirected from `/search/3` to `/managers/properties`.
+  - On the manager's applications page, approving behind the confirmation created a one-year lease (next payment shown), and the tab counts updated.
+  - The hero search with the placeholder Mapbox token shows the "unavailable" toast and stays on the page.
+  - The test application, lease and residence link were removed afterwards.
+  - The card layout was fixed after this run: the date column was too narrow, and the page scrolled horizontally next to the sidebar.
 
 **Acceptance tests**
-- [ ] `ApplicationModal`: validates with `applicationSchema`, submits `propertyId`, `tenantCognitoId` and `applicationDate`, then closes on success
-- [ ] `ContactWidget`: a signed-out user sees "Sign In to Apply", a tenant sees "Submit Application", and a manager sees no apply button
-- [ ] Manager applications page: the tabs filter by status; Approve and Deny call `updateApplicationStatus` with the right status; the buttons show only for Pending
-- [ ] `ApplicationCard`: renders the status badge colour per status and the lease end date when approved
-- [ ] Hero search: submitting a location dispatches the filters and navigates to `/search` with params
-- [ ] Root page: a manager is redirected to `/managers/properties`; a tenant or a signed-out user sees the landing page
+- [x] `search/[id]/ContactWidget.test.tsx`:
+  - A signed-out visitor gets a sign-in link that returns to the property, and a manager gets no apply button.
+  - A pending application replaces the button with a link to the applications page. A denied one allows applying again.
+  - The modal is prefilled, trims the message, submits `{ propertyId, name, email, phoneNumber, message }` and closes on success. An invalid phone number blocks the submit.
+- [x] `(dashboard)/applicationLists.test.tsx`:
+  - Tenant: an empty state, the note for each status (active and ended leases), the lease dates, next payment or "None", the manager's mailto link, and the residence or listing link.
+  - Manager: the tab counts and per-status filtering. Approve and Deny appear only on pending applications, and each sends the right status only after confirmation. Cancel sends nothing.
+- [x] `_components/ManagerRedirect.test.tsx`: managers are sent away from `/`, `/search` and `/search/4`. Tenants, signed-out visitors and other paths such as `/searching` are left alone.
+- [x] `_landing/HeroSection.test.tsx` and `hooks/use-locate.test.ts`:
+  - The hero navigates with the geocoded location and coordinates, and stays put when nothing is found.
+  - The hook trims the query, skips blank queries, and shows a toast for no results and for geocoder errors.
+- [x] `lib/schemas.test.ts`: a blank message becomes `undefined`, and a message over 2000 characters is rejected. `lib/utils.test.ts`: `apiErrorMessage` uses the API's message for 4xx responses only.
+- [x] `applicationService.int.test.ts`: `nextPaymentDate` is `null` after the lease ends
+- [x] `npm run build` succeeds
 
 **Deviations**
-- Upstream `ContactWidget` shows "Submit Application" to any signed-in user, including managers, who can't apply. Managers see no apply button.
+- The client sends only the form fields and `propertyId`. Upstream also sent `applicationDate`, `status` and `tenantCognitoId`; the F5 API sets those from the server clock and the verified token.
+- Upstream `ContactWidget` shows "Submit Application" to any signed-in user, including managers, who can't apply. Managers see no apply button (and are redirected away from search).
+- Server errors are shown in the toast for 4xx responses, such as "You already have a pending application for this property" (409). Upstream wrapped every endpoint in a generic toast, including every query.
+- Approve and Deny need confirmation, because approval creates a lease and neither action can be undone. Upstream changed the status on the first click.
+- Removed fake actions: "Download Agreement" and "Contact User" had no behaviour. The contact column has working `tel:` and `mailto:` links instead.
+- The card shows the application date and hides lease rows when there is no lease. Upstream rendered `Invalid Date` for pending and denied applications, and a placeholder landing image as every contact's avatar.
+- Tenant notes: an approved application whose lease has ended says so, instead of "rented by you until" a past date.
+- Hero search: upstream swapped longitude and latitude in `setFilters` and used the deprecated Mapbox v5 geocoding API. Ours reuses the F6 v6 geocoder and serializes through `lib/searchFilters.ts`.
+- The manager redirect doesn't block rendering. Upstream showed "Loading..." on every public page until the auth check finished, even for signed-out visitors.
+- Upstream's `console.log("status:")` in the application controller is not ported
+- The `Toaster` was already mounted in `providers.tsx` (F4)
 
 ## F9: Deployment
 

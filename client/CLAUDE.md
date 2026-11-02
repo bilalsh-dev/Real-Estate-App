@@ -11,6 +11,7 @@ src/app/(nondashboard)/   Public pages: landing, search, property details
 src/app/(dashboard)/      Authenticated areas: tenants/*, managers/*
 src/app/(auth)/           /signin and /signup with the Amplify Authenticator (_components/AuthForm.tsx)
 src/app/(dashboard)/_components/  DashboardShell (auth and role guard, sidebar), ProfileSettings
+src/app/(nondashboard)/_components/  ManagerRedirect (managers leave the landing and search pages)
 src/app/providers.tsx     Client providers: Redux, Amplify Authenticator.Provider, tooltips, toasts
 src/components/ui/        shadcn generated primitives
 src/components/           Shared app components (Navbar, AppSidebar, Card, FormField, ...)

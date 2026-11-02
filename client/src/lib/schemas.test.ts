@@ -83,6 +83,15 @@ describe("applicationSchema", () => {
     });
     expect(result.error?.issues.map((issue) => issue.path[0])).toEqual(["email", "phoneNumber"]);
   });
+
+  it("drops a blank message and rejects an oversized one", () => {
+    expect(
+      applicationSchema.parse({ ...validApplication, message: "   " }).message,
+    ).toBeUndefined();
+    expect(
+      applicationSchema.safeParse({ ...validApplication, message: "x".repeat(2001) }).success,
+    ).toBe(false);
+  });
 });
 
 describe("settingsSchema", () => {

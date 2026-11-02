@@ -45,6 +45,16 @@ export async function withToast<T>(operation: Promise<T>, messages: ToastMessage
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (!isRecord(error) || typeof error.status !== "number" || error.status >= 500) return fallback;
+  const { data } = error;
+  return isRecord(data) && typeof data.message === "string" ? data.message : fallback;
+}
+
 export function safeRedirectPath(path: string | null | undefined, fallback = "/"): string {
   if (!path?.startsWith("/") || path.startsWith("//") || path.includes("\\")) return fallback;
   return path;

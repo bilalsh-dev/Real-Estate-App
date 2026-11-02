@@ -156,6 +156,9 @@ export const DASHBOARD_HOME: Record<UserRole, string> = {
   manager: "/managers/properties",
 };
 
+export const SEARCH_PATH = "/search";
+export const TENANT_APPLICATIONS_PATH = "/tenants/applications";
+
 export const SETTINGS_PATH: Record<UserRole, string> = {
   tenant: "/tenants/settings",
   manager: "/managers/settings",

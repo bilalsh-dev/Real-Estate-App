@@ -14,6 +14,8 @@ const MAX_ROOMS = 10;
 const requiredString = (label: string) => z.string().trim().min(1, `${label} is required`);
 
 const MAX_PHONE_LENGTH = 32;
+const MAX_NAME_LENGTH = 100;
+const MAX_MESSAGE_LENGTH = 2000;
 
 const phoneNumber = z
   .string()
@@ -60,13 +62,19 @@ export type PropertyFormInput = z.input<typeof propertySchema>;
 export type PropertyFormData = z.output<typeof propertySchema>;
 
 export const applicationSchema = z.object({
-  name: requiredString("Name"),
+  name: requiredString("Name").max(MAX_NAME_LENGTH),
   email: z.email("Invalid email address"),
   phoneNumber,
-  message: z.string().trim().optional(),
+  message: z
+    .string()
+    .trim()
+    .max(MAX_MESSAGE_LENGTH)
+    .transform((value) => value || undefined)
+    .optional(),
 });
 
-export type ApplicationFormData = z.infer<typeof applicationSchema>;
+export type ApplicationFormInput = z.input<typeof applicationSchema>;
+export type ApplicationFormData = z.output<typeof applicationSchema>;
 
 export const settingsSchema = z.object({
   name: requiredString("Name"),

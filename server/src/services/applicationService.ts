@@ -18,7 +18,7 @@ export type ApplicationListItem = Application & {
   property: Property & { location: Location; manager: Manager };
   tenant: Tenant;
   manager: Manager;
-  lease: (Lease & { nextPaymentDate: Date }) | null;
+  lease: (Lease & { nextPaymentDate: Date | null }) | null;
 };
 
 export type ApplicationDetail = Application & {
@@ -64,7 +64,10 @@ export function createApplicationService(
         manager: application.property.manager,
         lease: application.lease && {
           ...application.lease,
-          nextPaymentDate: nextMonthlyDate(application.lease.startDate, today),
+          nextPaymentDate:
+            application.lease.endDate > today
+              ? nextMonthlyDate(application.lease.startDate, today)
+              : null,
         },
       }));
     },

@@ -73,7 +73,7 @@ export type Lease = {
   property?: Property;
   tenant?: Tenant;
   payments?: Payment[];
-  nextPaymentDate?: string;
+  nextPaymentDate?: string | null;
 };
 
 export type Payment = {
@@ -101,4 +101,11 @@ export type Application = {
   tenant?: Tenant;
   lease?: Lease | null;
   manager?: Manager;
+};
+
+export type ApplicationListItem = Application & {
+  property: Property;
+  tenant: Tenant;
+  manager: Manager;
+  lease: Lease | null;
 };

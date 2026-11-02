@@ -119,5 +119,9 @@ describe("applicationService (database)", () => {
 
     expect(await later.listForUser({ id: "mgr-1", role: "manager" })).toHaveLength(2);
     expect(await later.listForUser({ id: "mgr-2", role: "manager" })).toHaveLength(0);
+
+    const afterLease = createApplicationService(prisma, () => new Date("2027-04-01T00:00:00.000Z"));
+    const [ended] = await afterLease.listForUser({ id: "tenant-1", role: "tenant" });
+    expect(ended?.lease?.nextPaymentDate).toBeNull();
   });
 });

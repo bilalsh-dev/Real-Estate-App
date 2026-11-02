@@ -6,6 +6,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+vi.mock("@/hooks/use-locate", () => ({
+  useLocate: () => ({ locate: vi.fn(), isLocating: false }),
+}));
+
 vi.mock("@/components/CurrentYear", () => ({
   CurrentYear: () => <>{new Date().getFullYear()}</>,
 }));
